@@ -19,7 +19,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#include "SDL.h"
+#include <SDL.h>
 
 #ifdef OPENGL
 #include <GL/gl.h>
@@ -27,22 +27,15 @@
 
 #ifdef OPENGL
 #include "../ref_gl/gl_local.h"
-#include "../linux/glw_linux.h"
+#include "../solaris/glw_solaris.h"
 #else
 #include "../ref_soft/r_local.h"
 #endif
 
 #include "../client/keys.h"
-#include "../linux/rw_linux.h"
+#include "../solaris/rw_solaris.h"
 
 /*****************************************************************************/
-
-#define JOY_AXIS_X			0
-#define JOY_AXIS_Y			1
-#define JOY_AXIS_Z			2
-#define JOY_AXIS_R			3
-#define JOY_AXIS_U			4
-#define JOY_AXIS_V			5
 
 static qboolean                 X11_active = false;
 
@@ -101,17 +94,6 @@ static cvar_t *m_pitch;
 static cvar_t *m_forward;
 static cvar_t *my_freelook;
 
-/************************
- * Joystick
- ************************/
-static cvar_t   *in_joystick;
-static cvar_t   *j_invert_y;
-static qboolean joystick_avail;
-static SDL_Joystick *joy;
-static int joy_oldbuttonstate;
-static int joy_numbuttons;
-static int jx, jy, jt;
-
 static void Force_CenterView_f (void)
 {
 	in_state->viewangles[PITCH] = 0;
@@ -135,8 +117,7 @@ void RW_IN_Init(in_state_t *in_state_p)
 	// mouse variables
 	_windowed_mouse = ri.Cvar_Get ("_windowed_mouse", "0", CVAR_ARCHIVE);
 	m_filter = ri.Cvar_Get ("m_filter", "0", 0);
-	in_mouse = ri.Cvar_Get ("in_mouse", "1", CVAR_ARCHIVE);
-	in_joystick = ri.Cvar_Get ("in_joystick", "0", CVAR_ARCHIVE);
+    in_mouse = ri.Cvar_Get ("in_mouse", "1", CVAR_ARCHIVE);
 	my_freelook = ri.Cvar_Get( "freelook", "0", 0);
 	my_lookstrafe = ri.Cvar_Get ("lookstrafe", "0", 0);
 	
@@ -145,8 +126,6 @@ void RW_IN_Init(in_state_t *in_state_p)
 	m_yaw = ri.Cvar_Get ("m_yaw", "0.022", 0);
 	m_forward = ri.Cvar_Get ("m_forward", "1", 0);
 	m_side = ri.Cvar_Get ("m_side", "0.8", 0);
-
-	j_invert_y = ri.Cvar_Get("j_invert_y", "1", 0);
 
 	ri.Cmd_AddCommand ("+mlook", RW_IN_MLookDown);
 	ri.Cmd_AddCommand ("-mlook", RW_IN_MLookUp);
@@ -176,48 +155,31 @@ IN_Commands
 */
 void RW_IN_Commands (void)
 {
-	int i, key_index;
+	int i;
    
-	if (mouse_avail) {
-	  for (i=0 ; i<3 ; i++) {
-	    if ( (mouse_buttonstate & (1<<i)) && !(mouse_oldbuttonstate & (1<<i)) )
-	      in_state->Key_Event_fp (K_MOUSE1 + i, true);
-	    
-	    if ( !(mouse_buttonstate & (1<<i)) && (mouse_oldbuttonstate & (1<<i)) )
-	      in_state->Key_Event_fp (K_MOUSE1 + i, false);
-	  }
-	  if ( (mouse_buttonstate & (1<<3)) && !(mouse_oldbuttonstate & (1<<3)) )
-	    in_state->Key_Event_fp (K_MOUSE4, true);
-	  
-	  if ( !(mouse_buttonstate & (1<<3)) && (mouse_oldbuttonstate & (1<<3)) )
-	    in_state->Key_Event_fp (K_MOUSE4, false);
-	  
-	  if ( (mouse_buttonstate & (1<<4)) && !(mouse_oldbuttonstate & (1<<4)) )
-	    in_state->Key_Event_fp (K_MOUSE5, true);
-	  
-	  if ( !(mouse_buttonstate & (1<<4)) && (mouse_oldbuttonstate & (1<<4)) )
-	    in_state->Key_Event_fp (K_MOUSE5, false);
-	  
-	  mouse_oldbuttonstate = mouse_buttonstate;
+	if (!mouse_avail) 
+		return;
+   
+	for (i=0 ; i<3 ; i++) {
+		if ( (mouse_buttonstate & (1<<i)) && !(mouse_oldbuttonstate & (1<<i)) )
+			in_state->Key_Event_fp (K_MOUSE1 + i, true);
+
+		if ( !(mouse_buttonstate & (1<<i)) && (mouse_oldbuttonstate & (1<<i)) )
+			in_state->Key_Event_fp (K_MOUSE1 + i, false);
 	}
-	if (joystick_avail && joy) {
-	  for (i=0 ; i < joy_numbuttons ; i++)
-	    {
-	      if ( SDL_JoystickGetButton(joy, i) && joy_oldbuttonstate!=i )
-		{
-		  key_index = (i < 4) ? K_JOY1 : K_AUX1;
-		  in_state->Key_Event_fp (key_index + i, true);
-		  joy_oldbuttonstate = i;
-		}
-	      
-	      if ( !SDL_JoystickGetButton(joy, i) && joy_oldbuttonstate!=i )
-		{
-		  key_index = (i < 4) ? K_JOY1 : K_AUX1;
-		  in_state->Key_Event_fp (key_index + i, false);
-		  joy_oldbuttonstate = i;
-		}
-	    }
-	}
+	if ( (mouse_buttonstate & (1<<3)) && !(mouse_oldbuttonstate & (1<<3)) )
+		in_state->Key_Event_fp (K_MOUSE4, true);
+
+	if ( !(mouse_buttonstate & (1<<3)) && (mouse_oldbuttonstate & (1<<3)) )
+		in_state->Key_Event_fp (K_MOUSE4, false);
+
+	if ( (mouse_buttonstate & (1<<4)) && !(mouse_oldbuttonstate & (1<<4)) )
+		in_state->Key_Event_fp (K_MOUSE5, true);
+
+	if ( !(mouse_buttonstate & (1<<4)) && (mouse_oldbuttonstate & (1<<4)) )
+		in_state->Key_Event_fp (K_MOUSE5, false);
+
+	mouse_oldbuttonstate = mouse_buttonstate;
 }
 
 /*
@@ -227,78 +189,50 @@ IN_Move
 */
 void RW_IN_Move (usercmd_t *cmd)
 {
-  /*** FIXME 
-   *   You can accelerate while in the air, this doesn't
-   *   make physical sense.  Try falling off something and then moving
-   *   forward.
-   ***/
-  
-  if (mouse_avail) {
-    if (m_filter->value)
-      {
-	mouse_x = (mx + old_mouse_x) * 0.5;
-	mouse_y = (my + old_mouse_y) * 0.5;
-      } else {
-	mouse_x = mx;
-	mouse_y = my;
-      }
-    
-    old_mouse_x = mx;
-    old_mouse_y = my;
-    
-    if (mouse_x || mouse_y) {    
-      mouse_x *= sensitivity->value;
-      mouse_y *= sensitivity->value;
-      
-      // add mouse X/Y movement to cmd
-      if ( (*in_state->in_strafe_state & 1) || 
-	   (my_lookstrafe->value && mlooking ))
-	cmd->sidemove += m_side->value * mouse_x;
-      else
-	in_state->viewangles[YAW] -= m_yaw->value * mouse_x;
-      
-      
-      if ( (mlooking || my_freelook->value) && 
-	   !(*in_state->in_strafe_state & 1))
+	if (!mouse_avail)
+		return;
+   
+	if (m_filter->value)
 	{
-	  in_state->viewangles[PITCH] += m_pitch->value * mouse_y;
+		mouse_x = (mx + old_mouse_x) * 0.5;
+		mouse_y = (my + old_mouse_y) * 0.5;
+	} else {
+		mouse_x = mx;
+		mouse_y = my;
 	}
-      else
-	{
-	  cmd->forwardmove -= m_forward->value * mouse_y;
-	}
-      mx = my = 0;
-    }
-  }
-  if (joystick_avail && joy) {
-    // add joy X/Y movement to cmd
-    if ( (*in_state->in_strafe_state & 1) || 
-	 (my_lookstrafe->value && mlooking ))
-      cmd->sidemove += m_side->value * (jx/100);
-    else
-      in_state->viewangles[YAW] -= m_yaw->value * (jx/100);
-    
-    if ( (mlooking || my_freelook->value) && 
-	 !(*in_state->in_strafe_state & 1))
-      {
-	if (j_invert_y)
-	  in_state->viewangles[PITCH] -= m_pitch->value * (jy/100);
+
+	old_mouse_x = mx;
+	old_mouse_y = my;
+
+	if (!mouse_x && !mouse_y)
+		return;
+
+	mouse_x *= sensitivity->value;
+	mouse_y *= sensitivity->value;
+
+// add mouse X/Y movement to cmd
+	if ( (*in_state->in_strafe_state & 1) || 
+		(my_lookstrafe->value && mlooking ))
+		cmd->sidemove += m_side->value * mouse_x;
 	else
-	  in_state->viewangles[PITCH] += m_pitch->value * (jy/100);
-	cmd->forwardmove -= m_forward->value * (jt/100);
-      }
-    else
-      {
-	cmd->forwardmove -= m_forward->value * (jy/100);
-      }
-    
-    jt = jx = jy = 0;
-  }
+		in_state->viewangles[YAW] -= m_yaw->value * mouse_x;
+
+
+	if ( (mlooking || my_freelook->value) && 
+		!(*in_state->in_strafe_state & 1))
+	{
+		in_state->viewangles[PITCH] += m_pitch->value * mouse_y;
+	}
+	else
+	{
+		cmd->forwardmove -= m_forward->value * mouse_y;
+	}
+	mx = my = 0;
 }
 
 #if 0
 static void IN_DeactivateMouse( void ) 
-{ 
+{
 	if (!mouse_avail)
 		return;
 
@@ -465,20 +399,6 @@ void GetEvent(SDL_Event *event)
 		break;
 	case SDL_MOUSEBUTTONUP:
 		break;
-	case SDL_JOYBUTTONDOWN:
-	  keyq[keyq_head].key = 
-	    ((((SDL_JoyButtonEvent*)event)->button < 4)?K_JOY1:K_AUX1)+
-	    ((SDL_JoyButtonEvent*)event)->button;
-	  keyq[keyq_head].down = true;
-	  keyq_head = (keyq_head+1)&63;
-	  break;
-	case SDL_JOYBUTTONUP:
-	  keyq[keyq_head].key = 
-	    ((((SDL_JoyButtonEvent*)event)->button < 4)?K_JOY1:K_AUX1)+
-	    ((SDL_JoyButtonEvent*)event)->button;
-	  keyq[keyq_head].down = false;
-	  keyq_head = (keyq_head+1)&63;
-	  break;
 	case SDL_KEYDOWN:
 		if ( (KeyStates[SDLK_LALT] || KeyStates[SDLK_RALT]) &&
 			(event->key.keysym.sym == SDLK_RETURN) ) {
@@ -538,45 +458,6 @@ void GetEvent(SDL_Event *event)
 
 }
 
-void InitJoystick() {
-  int num_joysticks, i;
-
-  if (!(SDL_INIT_JOYSTICK&SDL_WasInit(SDL_INIT_JOYSTICK))) {
-    ri.Con_Printf(PRINT_ALL, "SDL Joystick not initialized, trying to init...\n");
-    SDL_Init(SDL_INIT_JOYSTICK);
-  }
-  if (in_joystick) {
-    ri.Con_Printf(PRINT_ALL, "Trying to start-up joystick...\n");
-    if ((num_joysticks=SDL_NumJoysticks())) {
-      for(i=0;i<num_joysticks;i++) {
-	ri.Con_Printf(PRINT_ALL, "Trying joystick [%s]\n", 
-		      SDL_JoystickName(i));
-	if (!SDL_JoystickOpened(i)) {
-	  joy = SDL_JoystickOpen(0);
-	  if (joy) {
-	    ri.Con_Printf(PRINT_ALL, "Joytick activated.\n");
-	    joystick_avail = true;
-	    joy_numbuttons = SDL_JoystickNumButtons(joy);
-	    break;
-	  }
-	}
-      }
-      if (!joy) {
-	ri.Con_Printf(PRINT_ALL, "Failed to open any joysticks\n");
-	joystick_avail = false;
-      }
-    }
-    else {
-      ri.Con_Printf(PRINT_ALL, "No joysticks available\n");
-      joystick_avail = false;
-    }
-  }
-  else {
-    ri.Con_Printf(PRINT_ALL, "Joystick Inactive\n");
-    joystick_avail = false;
-  }
-}
-
 /*****************************************************************************/
 
 /*
@@ -612,12 +493,8 @@ int SWimp_Init( void *hInstance, void *wndProc )
 	}
 #endif
 
-	InitJoystick();
-
 	return true;
 }
-
-
 
 #ifdef OPENGL
 void *GLimp_GetProcAddress(const char *func)
@@ -633,13 +510,13 @@ int GLimp_Init( void *hInstance, void *wndProc )
 
 static void SetSDLIcon()
 {
-#include "q2icon.xbm"
+#include "q2.xbm"
 	SDL_Surface *icon;
 	SDL_Color color;
 	Uint8 *ptr;
 	int i, mask;
 
-	icon = SDL_CreateRGBSurface(SDL_SWSURFACE, q2icon_width, q2icon_height, 8, 0, 0, 0, 0);
+	icon = SDL_CreateRGBSurface(SDL_SWSURFACE, q2_width, q2_height, 8, 0, 0, 0, 0);
 	if (icon == NULL)
 		return; /* oh well... */
 	SDL_SetColorKey(icon, SDL_SRCCOLORKEY, 0);
@@ -654,9 +531,9 @@ static void SetSDLIcon()
 	SDL_SetColors(icon, &color, 1, 1);
 
 	ptr = (Uint8 *)icon->pixels;
-	for (i = 0; i < sizeof(q2icon_bits); i++) {
+	for (i = 0; i < sizeof(q2_bits); i++) {
 		for (mask = 1; mask != 0x100; mask <<= 1) {
-			*ptr = (q2icon_bits[i] & mask) ? 1 : 0;
+			*ptr = (q2_bits[i] & mask) ? 1 : 0;
 			ptr++;
 		}		
 	}
@@ -714,7 +591,7 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 	if (fullscreen)
 		flags |= SDL_FULLSCREEN;
 	
-	SetSDLIcon(); /* currently uses q2icon.xbm data */
+	SetSDLIcon(); /* currently uses q2.xbm data */
 	
 	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 8, flags)) == NULL) {
 		Sys_Error("(SOFTSDL) SDL SetVideoMode failed: %s\n", SDL_GetError());
@@ -729,8 +606,6 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 	vid.buffer = surface->pixels;
 
 	X11_active = true;
-
-	
 
 	return true;
 }
@@ -769,7 +644,7 @@ static qboolean GLimp_InitGraphics( qboolean fullscreen )
 	if (fullscreen)
 		flags |= SDL_FULLSCREEN;
 	
-	SetSDLIcon(); /* currently uses q2icon.xbm data */
+	SetSDLIcon(); /* currently uses q2.xbm data */
 	
 	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 0, flags)) == NULL) {
 		Sys_Error("(SDLGL) SDL SetVideoMode failed: %s\n", SDL_GetError());
@@ -990,13 +865,7 @@ void KBD_Update(void)
 
 	if (!mx && !my)
 		SDL_GetRelativeMouseState(&mx, &my);
-	
-	if (joystick_avail && joy) {
-	  jx = SDL_JoystickGetAxis(joy, 0);
-	  jy = SDL_JoystickGetAxis(joy, 1);
-	  jt = SDL_JoystickGetAxis(joy, 3);
-	}
-	
+		
 	mouse_buttonstate = 0;
 	bstate = SDL_GetMouseState(NULL, NULL);
 	if (SDL_BUTTON(1) & bstate)

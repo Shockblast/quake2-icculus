@@ -1,5 +1,5 @@
         Minor OS-oriented changes to id Software's Quake2 3.21: 
-                        "It works for me, v1.0"
+                        "It works for me and a few others, v0.10"
 
 (NOTE: throughout this document, references to i386 [debugi386, releasei386,
  gamei386.so] are used.  If your architecture is not i386, just substitute
@@ -169,7 +169,18 @@ quake2 +set dedicated 1 +set ip <IPv4 address>
 
 Joystick Support:
 -----------------
-None yet.
+Joystick should function on all compatible SDL platforms using the sdlquake2
+binary as well as on linux using the linux kernel joystick API.  If you want
+to build with joystick support (the default) set BUILD_JOYSTICK to YES in
+the Makefile.  
+Joystick obeys the same free-look/strafe rules as mouse.  You can set these in
+the options menu.
+There are four command line settings for joystick:
+j_invert_y [1],0 if set to zero pulling back on the joystick points down
+j_lr_axis [0] set the axis which controls left right movement
+j_ud_axis [1] set the axis which controls up down (in free-look) or forward back (freelock off)
+j_throttle [3] set the axis which controls the players forward backward throttle (if free-look is true)
+
 
 Windows Support:
 ----------------
@@ -259,7 +270,6 @@ TODO:
 -----
 Fix save games.
 Verify that FXGL works.
-Joystick support.
 Fullscreen/DGA support in X11 driver.
 Have menu only list ref libs that are available.
 Have menu only list window sizes that are available.
@@ -285,8 +295,23 @@ Florent Parent
 Zachary 'zakk' Slater
 Matti Valtonen
 
-v0.0.9: [XX/XX/XX] CVS
--------
+v 0.10: [4/01/02] (no fooling...)
+-----
++ Extensive improvments to Solaris support (thanks to Vincent Cojot!)
++ Joystick support
++ Fixed R_CON_PASSWORD server security hole.
+
+v0.9: [03/10/02]
+-----
++ X selection support (softx/glx only).
++ Mouse Wheel support (softx/glx).
++ CD Audio fixes. (W.P. van Paassen)
++ Swapped SDL buttons 2/3 to be correct.
++ Big Gun+save game crash fixed.
++ FreeBSD support (Hampton Maxwell).
++ Mouse buttons 4/5 supported (sdl only). (Angelo Grossini)
++ IPv6 support. (Florent Parent)
++ Documentation updates.
 
 v0.0.8: [01/04/02]
 -------
