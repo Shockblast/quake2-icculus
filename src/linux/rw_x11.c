@@ -277,6 +277,8 @@ static cvar_t *m_pitch;
 static cvar_t *m_forward;
 static cvar_t *freelook;
 
+static Time myxtime;
+
 static void Force_CenterView_f (void)
 {
 	in_state->viewangles[PITCH] = 0;
@@ -513,6 +515,50 @@ void RW_IN_Shutdown(void)
 		ri.Cmd_RemoveCommand ("-mlook");
 		ri.Cmd_RemoveCommand ("force_centerview");
 	}
+}
+
+/*****************************************************************************/
+
+char *RW_Sys_GetClipboardData()
+{
+	Window sowner;
+	Atom type, property;
+	unsigned long len, bytes_left, tmp;
+	unsigned char *data;
+	int format, result;
+	char *ret = NULL;
+			
+	sowner = XGetSelectionOwner(dpy, XA_PRIMARY);
+			
+	if (sowner != None) {
+		property = XInternAtom(dpy,
+				       "GETCLIPBOARDDATA_PROP",
+				       False);
+				
+		XConvertSelection(dpy,
+				  XA_PRIMARY, XA_STRING,
+				  property, win, myxtime); /* myxtime == time of last X event */
+		XFlush(dpy);
+
+		XGetWindowProperty(dpy,
+				   win, property,
+				   0, 0, False, AnyPropertyType,
+				   &type, &format, &len,
+				   &bytes_left, &data);
+		if (bytes_left > 0) {
+			result =
+			XGetWindowProperty(dpy,
+					   win, property,
+					   0, bytes_left, True, AnyPropertyType,
+					   &type, &format, &len,
+					   &tmp, &data);
+			if (result == Success) {
+				ret = strdup(data);
+			}
+			XFree(data);
+		}
+	}
+	return ret;
 }
 
 /*****************************************************************************/
@@ -764,6 +810,7 @@ void HandleEvents(void)
 
 		switch(event.type) {
 		case KeyPress:
+			myxtime = event.xkey.time;
 		case KeyRelease:
 			if (in_state && in_state->Key_Event_fp)
 				in_state->Key_Event_fp (XLateKey(&event.xkey), event.type == KeyPress);
@@ -793,10 +840,9 @@ void HandleEvents(void)
 			}
 			break;
 
-
-			break;
-
 		case ButtonPress:
+			myxtime = event.xbutton.time;
+			
 			b=-1;
 			if (event.xbutton.button == 1)
 				b = 0;
@@ -804,6 +850,10 @@ void HandleEvents(void)
 				b = 2;
 			else if (event.xbutton.button == 3)
 				b = 1;
+			else if (event.xbutton.button == 4)
+				in_state->Key_Event_fp (K_MWHEELUP, 1);
+			else if (event.xbutton.button == 5)
+				in_state->Key_Event_fp (K_MWHEELDOWN, 1);
 			if (b>=0)
 				mouse_buttonstate |= 1<<b;
 			break;
@@ -816,6 +866,10 @@ void HandleEvents(void)
 				b = 2;
 			else if (event.xbutton.button == 3)
 				b = 1;
+			else if (event.xbutton.button == 4)
+				in_state->Key_Event_fp (K_MWHEELUP, 0);
+			else if (event.xbutton.button == 5)
+				in_state->Key_Event_fp (K_MWHEELDOWN, 0);
 			if (b>=0)
 				mouse_buttonstate &= ~(1<<b);
 			break;
@@ -1223,8 +1277,8 @@ void SWimp_SetPalette( const unsigned char *palette )
 	if (!X11_active)
 		return;
 
-    if ( !palette )
-        palette = ( const unsigned char * ) sw_state.currentpalette;
+	if ( !palette )
+		palette = ( const unsigned char * ) sw_state.currentpalette;
  
 	for(i=0;i<256;i++) {
 		st2d_8to16table[i]= xlib_rgb16(palette[i*4], palette[i*4+1],palette[i*4+2]);
@@ -1335,5 +1389,4 @@ void KBD_Update(void)
 void KBD_Close(void)
 {
 }
-
 

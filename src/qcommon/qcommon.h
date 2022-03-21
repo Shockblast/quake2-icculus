@@ -41,7 +41,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define	CPUSTRING	"AXP"
 #endif
 
-#elif defined __linux__
+#elif defined __linux__ || defined __FreeBSD__
 
 #define BUILDSTRING "Linux"
 
@@ -527,15 +527,24 @@ NET
 #define	MAX_MSGLEN		1400		// max length of a message
 #define	PACKET_HEADER	10			// two ints and a short
 
+#ifdef HAVE_IPV6
+typedef enum {NA_LOOPBACK, NA_BROADCAST, NA_IP, NA_IPX, NA_BROADCAST_IPX, NA_IP6, NA_MULTICAST6} netadrtype_t;
+#else
 typedef enum {NA_LOOPBACK, NA_BROADCAST, NA_IP, NA_IPX, NA_BROADCAST_IPX} netadrtype_t;
+#endif
 
 typedef enum {NS_CLIENT, NS_SERVER} netsrc_t;
 
 typedef struct
 {
 	netadrtype_t	type;
-
+#ifdef HAVE_IPV6
+        /* TODO. Use sockaddr_storage instead. */
+        byte	ip[16];
+        unsigned int scope_id;
+#else
 	byte	ip[4];
+#endif    
 	byte	ipx[10];
 
 	unsigned short	port;
@@ -738,6 +747,7 @@ void		Com_BeginRedirect (int target, char *buffer, int buffersize, void (*flush)
 void		Com_EndRedirect (void);
 void 		Com_Printf (char *fmt, ...);
 void 		Com_DPrintf (char *fmt, ...);
+void		Com_MDPrintf (char *fmt, ...);
 void 		Com_Error (int code, char *fmt, ...);
 void 		Com_Quit (void);
 
@@ -751,6 +761,7 @@ float	frand(void);	// 0 ti 1
 float	crand(void);	// -1 to 1
 
 extern	cvar_t	*developer;
+extern	cvar_t	*modder;
 extern	cvar_t	*dedicated;
 extern	cvar_t	*host_speeds;
 extern	cvar_t	*log_stats;

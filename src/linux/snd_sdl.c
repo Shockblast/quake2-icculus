@@ -22,7 +22,7 @@
 		59 Temple Place - Suite 330
 		Boston, MA  02111-1307, USA
 
-	$Id: snd_sdl.c,v 1.1 2001/12/28 10:05:47 relnev Exp $
+	$Id: snd_sdl.c,v 1.2 2002/02/09 20:29:38 relnev Exp $
 */
 
 #include "SDL.h"
@@ -91,6 +91,8 @@ SNDDMA_Init (void)
 	desired.channels = (Cvar_Get("sndchannels", "2", CVAR_ARCHIVE))->value;
 	
 	if (desired.freq == 44100)
+		desired.samples = 2048;
+	else if (desired.freq == 22050)
 		desired.samples = 1024;
 	else
 		desired.samples = 512;

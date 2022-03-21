@@ -35,8 +35,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <errno.h>
-#include <mntent.h>
-
 #include <dlfcn.h>
 
 #include "../qcommon/qcommon.h"
@@ -66,17 +64,14 @@ void Sys_Printf (char *fmt, ...)
 {
 	va_list		argptr;
 	char		text[1024];
-	unsigned char		*p;
+	unsigned char	*p;
 
 	va_start (argptr,fmt);
 	vsnprintf (text,1024,fmt,argptr);
 	va_end (argptr);
 
-	if (strlen(text) > sizeof(text))
-		Sys_Error("memory overwrite in Sys_Printf");
-
-    if (nostdout && nostdout->value)
-        return;
+	if (nostdout && nostdout->value)
+		return;
 
 	for (p = (unsigned char *)text; *p; p++) {
 		*p &= 0x7f;
@@ -91,7 +86,7 @@ void Sys_Quit (void)
 {
 	CL_Shutdown ();
 	Qcommon_Shutdown ();
-    fcntl (0, F_SETFL, fcntl (0, F_GETFL, 0) & ~FNDELAY);
+	fcntl (0, F_SETFL, fcntl (0, F_GETFL, 0) & ~FNDELAY);
 	_exit(0);
 }
 
@@ -104,18 +99,18 @@ void Sys_Init(void)
 
 void Sys_Error (char *error, ...)
 { 
-    va_list     argptr;
-    char        string[1024];
+	va_list     argptr;
+	char        string[1024];
 
 // change stdin to non blocking
-    fcntl (0, F_SETFL, fcntl (0, F_GETFL, 0) & ~FNDELAY);
+	fcntl (0, F_SETFL, fcntl (0, F_GETFL, 0) & ~FNDELAY);
 
 	CL_Shutdown ();
 	Qcommon_Shutdown ();
     
-    va_start (argptr,error);
-    vsnprintf (string,1024,error,argptr);
-    va_end (argptr);
+	va_start (argptr,error);
+	vsnprintf (string,1024,error,argptr);
+	va_end (argptr);
 	fprintf(stderr, "Error: %s\n", string);
 
 	_exit (1);
@@ -124,12 +119,12 @@ void Sys_Error (char *error, ...)
 
 void Sys_Warn (char *warning, ...)
 { 
-    va_list     argptr;
-    char        string[1024];
-    
-    va_start (argptr,warning);
-    vsnprintf (string,1024,warning,argptr);
-    va_end (argptr);
+	va_list     argptr;
+	char        string[1024];
+
+	va_start (argptr,warning);
+	vsnprintf (string,1024,warning,argptr);
+	va_end (argptr);
 	fprintf(stderr, "Warning: %s", string);
 } 
 
@@ -158,10 +153,10 @@ void floating_point_exception_handler(int whatever)
 
 char *Sys_ConsoleInput(void)
 {
-    static char text[256];
-    int     len;
+	static char text[256];
+	int     len;
 	fd_set	fdset;
-    struct timeval timeout;
+	struct timeval timeout;
 
 	if (!dedicated || !dedicated->value)
 		return NULL;
@@ -215,9 +210,11 @@ Loads the game dll
 void *Sys_GetGameAPI (void *parms)
 {
 	void	*(*GetGameAPI) (void *);
-
+	
+	FILE	*fp;
 	char	name[MAX_OSPATH];
 	char	*path;
+	char	*str_p;
 #if defined __i386__
 	const char *gamename = "gamei386.so";
 #elif defined __alpha__
@@ -246,13 +243,33 @@ void *Sys_GetGameAPI (void *parms)
 		if (!path)
 			return NULL;		// couldn't find one anywhere
 		snprintf (name, MAX_OSPATH, "%s/%s", path, gamename);
-		game_library = dlopen (name, RTLD_NOW );
+		
+		/* skip it if it just doesn't exist */
+		fp = fopen(name, "rb");
+		if (fp == NULL)
+			continue;
+		fclose(fp);
+		
+		game_library = dlopen (name, RTLD_NOW);
 		if (game_library)
 		{
-			Com_DPrintf ("LoadLibrary (%s)\n",name);
+			Com_MDPrintf ("LoadLibrary (%s)\n",name);
 			break;
-		} else {
-			Com_DPrintf ("LoadLibrary (%s) failed\n", name, dlerror());
+		} 
+		else 
+		{
+			Com_Printf ("LoadLibrary (%s):", name);
+			
+			path = dlerror();
+			str_p = strchr(path, ':'); // skip the path (already shown)
+			if (str_p == NULL)
+				str_p = path;
+			else
+				str_p++;
+				
+			Com_Printf ("%s\n", str_p);
+			
+			return NULL; 
 		}
 	}
 
@@ -286,11 +303,6 @@ void Sys_SendKeyEvents (void)
 
 /*****************************************************************************/
 
-char *Sys_GetClipboardData(void)
-{
-	return NULL;
-}
-
 int main (int argc, char **argv)
 {
 	int 	time, oldtime, newtime;
@@ -298,6 +310,8 @@ int main (int argc, char **argv)
 	// go back to real user for config loads
 	saved_euid = geteuid();
 	seteuid(getuid());
+	
+	printf ("Quake 2 -- Version %s\n", LINUX_VERSION);
 
 	Qcommon_Init(argc, argv);
 
@@ -305,22 +319,20 @@ int main (int argc, char **argv)
 
 	nostdout = Cvar_Get("nostdout", "0", 0);
 	if (!nostdout->value) {
-		fcntl(0, F_SETFL, fcntl (0, F_GETFL, 0) | FNDELAY);
-//		printf ("Linux Quake -- Version %0.3f\n", LINUX_VERSION);
+		fcntl(0, F_SETFL, fcntl (0, F_GETFL, 0) | FNDELAY);	
 	}
 
-    oldtime = Sys_Milliseconds ();
-    while (1)
-    {
+	oldtime = Sys_Milliseconds ();
+	while (1)
+	{
 // find time spent rendering last frame
 		do {
 			newtime = Sys_Milliseconds ();
 			time = newtime - oldtime;
 		} while (time < 1);
-        Qcommon_Frame (time);
+		Qcommon_Frame (time);
 		oldtime = newtime;
-    }
-
+	}
 }
 
 #if 0

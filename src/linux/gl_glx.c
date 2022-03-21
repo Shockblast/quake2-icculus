@@ -34,7 +34,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <sys/vt.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <signal.h>
@@ -48,7 +47,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../linux/glw_linux.h"
 
 #include <X11/Xlib.h>
-
+#include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/cursorfont.h>
 
@@ -116,6 +115,8 @@ static cvar_t *m_yaw;
 static cvar_t *m_pitch;
 static cvar_t *m_forward;
 static cvar_t *freelook;
+
+static Time myxtime;
 
 static Cursor CreateNullCursor(Display *display, Window root)
 {
@@ -492,6 +493,7 @@ static void HandleEvents(void)
 
 		switch(event.type) {
 		case KeyPress:
+			myxtime = event.xkey.time;
 		case KeyRelease:
 			if (in_state && in_state->Key_Event_fp)
 				in_state->Key_Event_fp (XLateKey(&event.xkey), event.type == KeyPress);
@@ -518,6 +520,8 @@ static void HandleEvents(void)
 
 
 		case ButtonPress:
+			myxtime = event.xbutton.time;
+			
 			b=-1;
 			if (event.xbutton.button == 1)
 				b = 0;
@@ -525,6 +529,10 @@ static void HandleEvents(void)
 				b = 2;
 			else if (event.xbutton.button == 3)
 				b = 1;
+			else if (event.xbutton.button == 4)
+				in_state->Key_Event_fp (K_MWHEELUP, 1);
+			else if (event.xbutton.button == 5)
+				in_state->Key_Event_fp (K_MWHEELDOWN, 1);
 			if (b>=0 && in_state && in_state->Key_Event_fp)
 				in_state->Key_Event_fp (K_MOUSE1 + b, true);
 			break;
@@ -537,6 +545,10 @@ static void HandleEvents(void)
 				b = 2;
 			else if (event.xbutton.button == 3)
 				b = 1;
+			else if (event.xbutton.button == 4)
+				in_state->Key_Event_fp (K_MWHEELUP, 0);
+			else if (event.xbutton.button == 5)
+				in_state->Key_Event_fp (K_MWHEELDOWN, 0);
 			if (b>=0 && in_state && in_state->Key_Event_fp)
 				in_state->Key_Event_fp (K_MOUSE1 + b, false);
 			break;
@@ -579,6 +591,50 @@ void KBD_Update(void)
 
 void KBD_Close(void)
 {
+}
+
+/*****************************************************************************/
+
+char *RW_Sys_GetClipboardData()
+{
+	Window sowner;
+	Atom type, property;
+	unsigned long len, bytes_left, tmp;
+	unsigned char *data;
+	int format, result;
+	char *ret = NULL;
+			
+	sowner = XGetSelectionOwner(dpy, XA_PRIMARY);
+			
+	if (sowner != None) {
+		property = XInternAtom(dpy,
+				       "GETCLIPBOARDDATA_PROP",
+				       False);
+				
+		XConvertSelection(dpy,
+				  XA_PRIMARY, XA_STRING,
+				  property, win, myxtime); /* myxtime == time of last X event */
+		XFlush(dpy);
+
+		XGetWindowProperty(dpy,
+				   win, property,
+				   0, 0, False, AnyPropertyType,
+				   &type, &format, &len,
+				   &bytes_left, &data);
+		if (bytes_left > 0) {
+			result =
+			XGetWindowProperty(dpy,
+					   win, property,
+					   0, bytes_left, True, AnyPropertyType,
+					   &type, &format, &len,
+					   &tmp, &data);
+			if (result == Success) {
+				ret = strdup(data);
+			}
+			XFree(data);
+		}
+	}
+	return ret;
 }
 
 /*****************************************************************************/

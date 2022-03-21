@@ -3,6 +3,7 @@
 
 	CD code taken from SDLQuake and modified to work with Quake2
 	Robert Bäuml 2001-12-25
+	W.P. van Paassen 2002-01-06
 
 	This program is free software; you can redistribute it and/or
 	modify it under the terms of the GNU General Public License
@@ -22,7 +23,7 @@
 		59 Temple Place - Suite 330
 		Boston, MA  02111-1307, USA
 
-	$Id: cd_sdl.c,v 1.3 2002/01/03 05:10:14 relnev Exp $
+	$Id: cd_sdl.c,v 1.5 2002/02/16 19:03:06 relnev Exp $
 */
 
 #include <stdio.h>
@@ -88,6 +89,84 @@ void CDAudio_Play(int track, qboolean looping)
 	playLooping = looping;
 }
 
+void CDAudio_RandomPlay(void)
+{
+  int track, i = 0, free_tracks = 0;
+  float f;
+  CDstatus cd_stat;
+  byte* track_bools;
+
+  if (!cd_id || !enabled)
+    return;
+
+  track_bools = (byte*)malloc(cd_id->numtracks* sizeof(byte));
+
+  if (track_bools == 0)
+    return;
+
+  //create array of available audio tracknumbers
+
+  for (; i < cd_id->numtracks; i++)
+    {
+      track_bools[i] = cd_id->track[i].type == SDL_AUDIO_TRACK;
+      free_tracks += track_bools[i];
+    }
+
+  if (!free_tracks)
+    {
+      Com_DPrintf("CDAudio_RandomPlay: Unable to find and play a random audio track, insert an audio cd please");
+      goto free_end;
+    }
+
+  //choose random audio track
+  do
+    {
+      do
+	{
+	  f = ((float)rand()) / ((float)RAND_MAX + 1.0);
+	  track = (int)(cd_id->numtracks  * f);
+	}
+      while(!track_bools[track]);
+      
+      lastTrack = track+1;
+      
+      cd_stat=SDL_CDStatus(cd_id);
+      
+      if(!cdValid)
+	{
+	  if(!CD_INDRIVE(cd_stat) ||(!cd_id->numtracks)) 
+	    {
+	      goto free_end;
+	    }
+	  cdValid = true;
+	}
+      
+      if(cd_stat == CD_PLAYING)
+	{
+	  if(cd_id->cur_track == track + 1) 
+	    {
+	      goto free_end;
+	    }
+	  CDAudio_Stop();
+	}
+      
+      if (SDL_CDPlay(cd_id,cd_id->track[track].offset,
+		     cd_id->track[track].length))
+	{
+	  track_bools[track] = 0;
+	  free_tracks--;
+	}
+      else
+	{
+	  playLooping = true;
+	  break;
+	}
+    }
+  while (free_tracks > 0);
+
+ free_end:
+  free((void*)track_bools);
+}
 
 void CDAudio_Stop()
 {
@@ -158,6 +237,9 @@ int CDAudio_Init()
 {
 	cvar_t *cv;
 
+	if (initialized)
+		return 0;
+
 	cv = Cvar_Get ("nocdaudio", "0", CVAR_NOSET);
 	if (cv->value)
 		return -1;
@@ -219,6 +301,8 @@ void CDAudio_Shutdown()
 		SDL_Quit();
 	else
 		SDL_QuitSubSystem(SDL_INIT_CDROM);
+
+	initialized = false;
 }
 
 static void CD_f()

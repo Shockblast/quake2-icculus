@@ -167,6 +167,18 @@ void RW_IN_Commands (void)
 		if ( !(mouse_buttonstate & (1<<i)) && (mouse_oldbuttonstate & (1<<i)) )
 			in_state->Key_Event_fp (K_MOUSE1 + i, false);
 	}
+	if ( (mouse_buttonstate & (1<<3)) && !(mouse_oldbuttonstate & (1<<3)) )
+		in_state->Key_Event_fp (K_MOUSE4, true);
+
+	if ( !(mouse_buttonstate & (1<<3)) && (mouse_oldbuttonstate & (1<<3)) )
+		in_state->Key_Event_fp (K_MOUSE4, false);
+
+	if ( (mouse_buttonstate & (1<<4)) && !(mouse_oldbuttonstate & (1<<4)) )
+		in_state->Key_Event_fp (K_MOUSE5, true);
+
+	if ( !(mouse_buttonstate & (1<<4)) && (mouse_oldbuttonstate & (1<<4)) )
+		in_state->Key_Event_fp (K_MOUSE5, false);
+
 	mouse_oldbuttonstate = mouse_buttonstate;
 }
 
@@ -383,22 +395,26 @@ void GetEvent(SDL_Event *event)
 			keyq[keyq_head].key = K_MWHEELDOWN;
 			keyq[keyq_head].down = false;
 			keyq_head = (keyq_head + 1) & 63;
-		}
+		} 
 		break;
 	case SDL_MOUSEBUTTONUP:
 		break;
 	case SDL_KEYDOWN:
-#if 0
 		if ( (KeyStates[SDLK_LALT] || KeyStates[SDLK_RALT]) &&
 			(event->key.keysym.sym == SDLK_RETURN) ) {
-			/* SDL_WM_ToggleFullScreen(surface); */
+			cvar_t *fullscreen;
+			
+			SDL_WM_ToggleFullScreen(surface);
 				
 			if (surface->flags & SDL_FULLSCREEN) {
-				ri.Cvar_SetValue( "vid_fullscreen", /*1*/ 0 );
+				ri.Cvar_SetValue( "vid_fullscreen", 1 );
 			} else {
-				ri.Cvar_SetValue( "vid_fullscreen", /*0*/ 1 );
+				ri.Cvar_SetValue( "vid_fullscreen", 0 );
 			}
 
+			fullscreen = ri.Cvar_Get( "vid_fullscreen", "0", 0 );
+			fullscreen->modified = false; /* we just changed it with SDL. */
+			
 			break; /* ignore this key */
 		}
 		
@@ -413,7 +429,7 @@ void GetEvent(SDL_Event *event)
 			
 			break; /* ignore this key */
 		}
-#endif		
+
 		KeyStates[event->key.keysym.sym] = 1;
 		
 		key = XLateKey(event->key.keysym.sym);
@@ -854,10 +870,15 @@ void KBD_Update(void)
 	bstate = SDL_GetMouseState(NULL, NULL);
 	if (SDL_BUTTON(1) & bstate)
 		mouse_buttonstate |= (1 << 0);
-	if (SDL_BUTTON(2) & bstate)
+	if (SDL_BUTTON(3) & bstate) /* quake2 has the right button be mouse2 */
 		mouse_buttonstate |= (1 << 1);
-	if (SDL_BUTTON(3) & bstate)
+	if (SDL_BUTTON(2) & bstate) /* quake2 has the middle button be mouse3 */
 		mouse_buttonstate |= (1 << 2);
+	if (SDL_BUTTON(6) & bstate)
+		mouse_buttonstate |= (1 << 3);
+	if (SDL_BUTTON(7) & bstate)
+		mouse_buttonstate |= (1 << 4);
+
 	
 	if (old_windowed_mouse != _windowed_mouse->value) {
 		old_windowed_mouse = _windowed_mouse->value;
