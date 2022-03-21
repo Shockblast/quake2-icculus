@@ -37,13 +37,6 @@
 
 /*****************************************************************************/
 
-#define JOY_AXIS_X			0
-#define JOY_AXIS_Y			1
-#define JOY_AXIS_Z			2
-#define JOY_AXIS_R			3
-#define JOY_AXIS_U			4
-#define JOY_AXIS_V			5
-
 static qboolean                 X11_active = false;
 
 static SDL_Surface *surface;
@@ -74,6 +67,9 @@ glwstate_t glw_state;
 /* MOUSE                                                                     */
 /*****************************************************************************/
 
+#define MOUSE_MAX 3000
+#define MOUSE_MIN 40
+
 // this is inside the renderer shared lib, so these are called from vid_so
 
 static qboolean        mouse_avail;
@@ -94,6 +90,7 @@ static qboolean	mlooking;
 static in_state_t	*in_state;
 
 static cvar_t *sensitivity;
+static cvar_t *exponential_speedup;
 static cvar_t *my_lookstrafe;
 static cvar_t *m_side;
 static cvar_t *m_yaw;
@@ -104,6 +101,7 @@ static cvar_t *my_freelook;
 /************************
  * Joystick
  ************************/
+#ifdef Joystick
 static cvar_t   *in_joystick;
 static cvar_t   *j_invert_y;
 static qboolean joystick_avail;
@@ -111,6 +109,8 @@ static SDL_Joystick *joy;
 static int joy_oldbuttonstate;
 static int joy_numbuttons;
 static int jx, jy, jt;
+static int lr_axis, ud_axis, throttle_axis;
+#endif
 
 static void Force_CenterView_f (void)
 {
@@ -136,17 +136,23 @@ void RW_IN_Init(in_state_t *in_state_p)
 	_windowed_mouse = ri.Cvar_Get ("_windowed_mouse", "0", CVAR_ARCHIVE);
 	m_filter = ri.Cvar_Get ("m_filter", "0", 0);
 	in_mouse = ri.Cvar_Get ("in_mouse", "1", CVAR_ARCHIVE);
+#ifdef Joystick
 	in_joystick = ri.Cvar_Get ("in_joystick", "0", CVAR_ARCHIVE);
+	j_invert_y = ri.Cvar_Get("j_invert_y", "1", 0);
+	lr_axis = (int)ri.Cvar_Get("j_lr_axis", "0", CVAR_ARCHIVE)->value;
+	ud_axis = (int)ri.Cvar_Get("j_ud_axis", "1", CVAR_ARCHIVE)->value;
+	throttle_axis = (int)ri.Cvar_Get("j_throttle","3",CVAR_ARCHIVE)->value;
+#endif
 	my_freelook = ri.Cvar_Get( "freelook", "0", 0);
 	my_lookstrafe = ri.Cvar_Get ("lookstrafe", "0", 0);
 	
 	sensitivity = ri.Cvar_Get ("sensitivity", "3", 0);
+	exponential_speedup = ri.Cvar_Get("exponential_speedup", "0", 
+					  CVAR_ARCHIVE);
 	m_pitch = ri.Cvar_Get ("m_pitch", "0.022", 0);
 	m_yaw = ri.Cvar_Get ("m_yaw", "0.022", 0);
 	m_forward = ri.Cvar_Get ("m_forward", "1", 0);
 	m_side = ri.Cvar_Get ("m_side", "0.8", 0);
-
-	j_invert_y = ri.Cvar_Get("j_invert_y", "1", 0);
 
 	ri.Cmd_AddCommand ("+mlook", RW_IN_MLookDown);
 	ri.Cmd_AddCommand ("-mlook", RW_IN_MLookUp);
@@ -200,6 +206,7 @@ void RW_IN_Commands (void)
 	  
 	  mouse_oldbuttonstate = mouse_buttonstate;
 	}
+#ifdef Joystick
 	if (joystick_avail && joy) {
 	  for (i=0 ; i < joy_numbuttons ; i++)
 	    {
@@ -218,6 +225,7 @@ void RW_IN_Commands (void)
 		}
 	    }
 	}
+#endif
 }
 
 /*
@@ -246,10 +254,27 @@ void RW_IN_Move (usercmd_t *cmd)
     old_mouse_x = mx;
     old_mouse_y = my;
     
-    if (mouse_x || mouse_y) {    
-      mouse_x *= sensitivity->value;
-      mouse_y *= sensitivity->value;
-      
+    if (mouse_x || mouse_y) {
+      if (!exponential_speedup->value) {
+	mouse_x *= sensitivity->value;
+	mouse_y *= sensitivity->value;
+      }
+      else {
+	if (mouse_x > MOUSE_MIN || mouse_y > MOUSE_MIN || 
+	    mouse_x < -MOUSE_MIN || mouse_y < -MOUSE_MIN) {
+	  mouse_x = (mouse_x*mouse_x*mouse_x)/4;
+	  mouse_y = (mouse_y*mouse_y*mouse_y)/4;
+	  if (mouse_x > MOUSE_MAX)
+	    mouse_x = MOUSE_MAX;
+	  else if (mouse_x < -MOUSE_MAX)
+	    mouse_x = -MOUSE_MAX;
+	  if (mouse_y > MOUSE_MAX)
+	    mouse_y = MOUSE_MAX;
+	  else if (mouse_y < -MOUSE_MAX)
+	    mouse_y = -MOUSE_MAX;
+	}
+      }
+            
       // add mouse X/Y movement to cmd
       if ( (*in_state->in_strafe_state & 1) || 
 	   (my_lookstrafe->value && mlooking ))
@@ -270,6 +295,7 @@ void RW_IN_Move (usercmd_t *cmd)
       mx = my = 0;
     }
   }
+#ifdef Joystick
   if (joystick_avail && joy) {
     // add joy X/Y movement to cmd
     if ( (*in_state->in_strafe_state & 1) || 
@@ -294,6 +320,7 @@ void RW_IN_Move (usercmd_t *cmd)
     
     jt = jx = jy = 0;
   }
+#endif
 }
 
 #if 0
@@ -465,6 +492,7 @@ void GetEvent(SDL_Event *event)
 		break;
 	case SDL_MOUSEBUTTONUP:
 		break;
+#ifdef Joystick
 	case SDL_JOYBUTTONDOWN:
 	  keyq[keyq_head].key = 
 	    ((((SDL_JoyButtonEvent*)event)->button < 4)?K_JOY1:K_AUX1)+
@@ -479,66 +507,68 @@ void GetEvent(SDL_Event *event)
 	  keyq[keyq_head].down = false;
 	  keyq_head = (keyq_head+1)&63;
 	  break;
+#endif
 	case SDL_KEYDOWN:
-		if ( (KeyStates[SDLK_LALT] || KeyStates[SDLK_RALT]) &&
-			(event->key.keysym.sym == SDLK_RETURN) ) {
-			cvar_t *fullscreen;
-			
-			SDL_WM_ToggleFullScreen(surface);
-				
-			if (surface->flags & SDL_FULLSCREEN) {
-				ri.Cvar_SetValue( "vid_fullscreen", 1 );
-			} else {
-				ri.Cvar_SetValue( "vid_fullscreen", 0 );
-			}
-
-			fullscreen = ri.Cvar_Get( "vid_fullscreen", "0", 0 );
-			fullscreen->modified = false; /* we just changed it with SDL. */
-			
-			break; /* ignore this key */
-		}
-		
-		if ( (KeyStates[SDLK_LCTRL] || KeyStates[SDLK_RCTRL]) &&
-			(event->key.keysym.sym == SDLK_g) ) {
-			SDL_GrabMode gm = SDL_WM_GrabInput(SDL_GRAB_QUERY);
-			/*	
-			SDL_WM_GrabInput((gm == SDL_GRAB_ON) ? SDL_GRAB_OFF : SDL_GRAB_ON);
-			gm = SDL_WM_GrabInput(SDL_GRAB_QUERY);
-			*/	
-			ri.Cvar_SetValue( "_windowed_mouse", (gm == SDL_GRAB_ON) ? /*1*/ 0 : /*0*/ 1 );
-			
-			break; /* ignore this key */
-		}
-
-		KeyStates[event->key.keysym.sym] = 1;
-		
-		key = XLateKey(event->key.keysym.sym);
-		if (key) {
-			keyq[keyq_head].key = key;
-			keyq[keyq_head].down = true;
-			keyq_head = (keyq_head + 1) & 63;
-		}
-		break;
+	  if ( (KeyStates[SDLK_LALT] || KeyStates[SDLK_RALT]) &&
+	       (event->key.keysym.sym == SDLK_RETURN) ) {
+	    cvar_t *fullscreen;
+	    
+	    SDL_WM_ToggleFullScreen(surface);
+	    
+	    if (surface->flags & SDL_FULLSCREEN) {
+	      ri.Cvar_SetValue( "vid_fullscreen", 1 );
+	    } else {
+	      ri.Cvar_SetValue( "vid_fullscreen", 0 );
+	    }
+	    
+	    fullscreen = ri.Cvar_Get( "vid_fullscreen", "0", 0 );
+	    fullscreen->modified = false; /* we just changed it with SDL. */
+	    
+	    break; /* ignore this key */
+	  }
+	  
+	  if ( (KeyStates[SDLK_LCTRL] || KeyStates[SDLK_RCTRL]) &&
+	       (event->key.keysym.sym == SDLK_g) ) {
+	    SDL_GrabMode gm = SDL_WM_GrabInput(SDL_GRAB_QUERY);
+	    /*	
+	      SDL_WM_GrabInput((gm == SDL_GRAB_ON) ? SDL_GRAB_OFF : SDL_GRAB_ON);
+	      gm = SDL_WM_GrabInput(SDL_GRAB_QUERY);
+	    */	
+	    ri.Cvar_SetValue( "_windowed_mouse", (gm == SDL_GRAB_ON) ? /*1*/ 0 : /*0*/ 1 );
+	    
+	    break; /* ignore this key */
+	  }
+	  
+	  KeyStates[event->key.keysym.sym] = 1;
+	  
+	  key = XLateKey(event->key.keysym.sym);
+	  if (key) {
+	    keyq[keyq_head].key = key;
+	    keyq[keyq_head].down = true;
+	    keyq_head = (keyq_head + 1) & 63;
+	  }
+	  break;
 	case SDL_KEYUP:
-		if (KeyStates[event->key.keysym.sym]) {
-			KeyStates[event->key.keysym.sym] = 0;
-		
-			key = XLateKey(event->key.keysym.sym);
-			if (key) {
-				keyq[keyq_head].key = key;
-				keyq[keyq_head].down = false;
-				keyq_head = (keyq_head + 1) & 63;
-			}
-		}
-		break;
+	  if (KeyStates[event->key.keysym.sym]) {
+	    KeyStates[event->key.keysym.sym] = 0;
+	    
+	    key = XLateKey(event->key.keysym.sym);
+	    if (key) {
+	      keyq[keyq_head].key = key;
+	      keyq[keyq_head].down = false;
+	      keyq_head = (keyq_head + 1) & 63;
+	    }
+	  }
+	  break;
 	case SDL_QUIT:
-		ri.Cmd_ExecuteText(EXEC_NOW, "quit");
-		break;
+	  ri.Cmd_ExecuteText(EXEC_NOW, "quit");
+	  break;
 	}
 
 }
 
 void InitJoystick() {
+#ifdef Joystick
   int num_joysticks, i;
 
   if (!(SDL_INIT_JOYSTICK&SDL_WasInit(SDL_INIT_JOYSTICK))) {
@@ -575,6 +605,7 @@ void InitJoystick() {
     ri.Con_Printf(PRINT_ALL, "Joystick Inactive\n");
     joystick_avail = false;
   }
+#endif
 }
 
 /*****************************************************************************/
@@ -611,9 +642,9 @@ int SWimp_Init( void *hInstance, void *wndProc )
 		sigaction(SIGTERM, &sa, 0);
 	}
 #endif
-
+#ifdef Joystick
 	InitJoystick();
-
+#endif
 	return true;
 }
 
@@ -991,12 +1022,13 @@ void KBD_Update(void)
 	if (!mx && !my)
 		SDL_GetRelativeMouseState(&mx, &my);
 	
+#ifdef Joystick
 	if (joystick_avail && joy) {
-	  jx = SDL_JoystickGetAxis(joy, 0);
-	  jy = SDL_JoystickGetAxis(joy, 1);
-	  jt = SDL_JoystickGetAxis(joy, 3);
+	  jx = SDL_JoystickGetAxis(joy, lr_axis);
+	  jy = SDL_JoystickGetAxis(joy, ud_axis);
+	  jt = SDL_JoystickGetAxis(joy, throttle_axis);
 	}
-	
+#endif	
 	mouse_buttonstate = 0;
 	bstate = SDL_GetMouseState(NULL, NULL);
 	if (SDL_BUTTON(1) & bstate)

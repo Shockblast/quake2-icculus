@@ -22,7 +22,9 @@ BUILD_SDLGL=YES		# SDL OpenGL driver. Works fine for some people.
 BUILD_CTFDLL=YES	# game$(ARCH).so for ctf
 BUILD_XATRIX=NO		# game$(ARCH).so for xatrix (see README.r for details)
 BUILD_ROGUE=NO		# game$(ARCH).so for rogue (see README.r for details)
-BUILD_JOYSTICK=NO
+BUILD_JOYSTICK=YES
+BUILD_ARTS=NO
+BUILD_DEDICATED=NO
 
 # Other compile-time options:
 # Compile with IPv6 (protocol independent API). Tested on FreeBSD
@@ -99,6 +101,7 @@ GAME_DIR=$(MOUNT_DIR)/game
 CTF_DIR=$(MOUNT_DIR)/ctf
 XATRIX_DIR=$(MOUNT_DIR)/xatrix
 ROGUE_DIR=$(MOUNT_DIR)/rogue
+NULL_DIR=$(MOUNT_DIR)/null
 
 BASE_CFLAGS=-Wall -pipe -Dstricmp=strcasecmp
 ifeq ($(HAVE_IPV6),YES)
@@ -110,6 +113,9 @@ endif
 
 ifeq ($(BUILD_JOYSTICK),YES)
 BASE_CFLAGS+=-DJoystick
+endif
+ifeq ($(BUILD_ARTS),YES)
+BASE_CFLAGS+=$(shell artsc-config --cflags)
 endif
 
 ifneq ($(ARCH),i386)
@@ -125,6 +131,10 @@ ifeq ($(OSTYPE),Linux)
 LDFLAGS=-lm -ldl
 endif
 
+ifeq ($(BUILD_ARTS),YES)
+LDFLAGS+=$(shell artsc-config --libs)
+endif
+
 SVGALDFLAGS=-lvga
 
 XCFLAGS=-I/usr/X11R6/include
@@ -132,6 +142,9 @@ XLDFLAGS=-L/usr/X11R6/lib -lX11 -lXext -lXxf86dga -lXxf86vm
 
 SDLCFLAGS=$(shell sdl-config --cflags)
 SDLLDFLAGS=$(shell sdl-config --libs)
+ifeq ($(BUILD_JOYSTICK),YES)
+SDLCFLAGS+=-DJoystick
+endif
 
 FXGLCFLAGS=-I/usr/X11R6/include
 FXGLLDFLAGS=-L/usr/local/glide/lib -L/usr/X11/lib -L/usr/local/lib \
@@ -149,6 +162,8 @@ SHLIBCFLAGS=-fPIC
 SHLIBLDFLAGS=-shared
 
 DO_CC=$(CC) $(CFLAGS) -o $@ -c $<
+DO_DED_CC=$(CC) $(CFLAGS) -DDEDICATED_ONLY -o $@ -c $<
+DO_DED_DEBUG_CC=$(CC) $(DEBUG_CFLAGS) -DDEDICATED_ONLY -o $@ -c $<
 DO_SHLIB_CC=$(CC) $(CFLAGS) $(SHLIBCFLAGS) -o $@ -c $<
 DO_GL_SHLIB_CC=$(CC) $(CFLAGS) $(SHLIBCFLAGS) $(GLCFLAGS) -o $@ -c $<
 DO_AS=$(CC) $(CFLAGS) -DELF -x assembler-with-cpp -o $@ -c $<
@@ -161,7 +176,9 @@ DO_SHLIB_AS=$(CC) $(CFLAGS) $(SHLIBCFLAGS) -DELF -x assembler-with-cpp -o $@ -c 
 .PHONY : targets build_debug build_release clean clean-debug clean-release clean2
 
 TARGETS=$(BUILDDIR)/quake2 $(BUILDDIR)/game$(ARCH).$(SHLIBEXT)
-
+ifeq ($(strip $(BUILD_DEDICATED)),YES)
+ TARGETS += $(BUILDDIR)/q2ded
+endif
 ifeq ($(strip $(BUILD_CTFDLL)),YES)
  TARGETS += $(BUILDDIR)/ctf/game$(ARCH).$(SHLIBEXT)
 endif
@@ -299,6 +316,7 @@ all: build_debug build_release
 build_debug:
 	@-mkdir -p $(BUILD_DEBUG_DIR) \
 		$(BUILD_DEBUG_DIR)/client \
+		$(BUILD_DEBUG_DIR)/ded \
 		$(BUILD_DEBUG_DIR)/ref_soft \
 		$(BUILD_DEBUG_DIR)/ref_gl \
 		$(BUILD_DEBUG_DIR)/game \
@@ -310,6 +328,7 @@ build_debug:
 build_release:
 	@-mkdir -p $(BUILD_RELEASE_DIR) \
 		$(BUILD_RELEASE_DIR)/client \
+		$(BUILD_RELEASE_DIR)/ded \
 		$(BUILD_RELEASE_DIR)/ref_soft \
 		$(BUILD_RELEASE_DIR)/ref_gl \
 		$(BUILD_RELEASE_DIR)/game \
@@ -375,8 +394,12 @@ QUAKE2_OBJS = \
 	$(BUILDDIR)/client/pmove.o
 
 QUAKE2_LNX_OBJS = \
-	$(BUILDDIR)/client/cd_linux.o \
-	$(BUILDDIR)/client/snd_linux.o
+	$(BUILDDIR)/client/cd_linux.o 
+ifeq ($(BUILD_ARTS),YES)
+QUAKE2_LNX_OBJS += $(BUILDDIR)/client/snd_arts.o
+else
+QUAKE2_LNX_OBJS += $(BUILDDIR)/client/snd_linux.o
+endif
 
 QUAKE2_SDL_OBJS = \
 	$(BUILDDIR)/client/cd_sdl.o \
@@ -536,6 +559,9 @@ $(BUILDDIR)/client/net_udp6.o :    $(LINUX_DIR)/net_udp6.c
 $(BUILDDIR)/client/cd_linux.o :   $(LINUX_DIR)/cd_linux.c
 	$(DO_CC)
 
+$(BUILDDIR)/client/snd_arts.o :  $(LINUX_DIR)/snd_arts.c
+	$(DO_CC)
+
 $(BUILDDIR)/client/snd_linux.o :  $(LINUX_DIR)/snd_linux.c
 	$(DO_CC)
 
@@ -544,6 +570,112 @@ $(BUILDDIR)/client/cd_sdl.o :     $(LINUX_DIR)/cd_sdl.c
 
 $(BUILDDIR)/client/snd_sdl.o :     $(LINUX_DIR)/snd_sdl.c
 	$(DO_CC) $(SDLCFLAGS)
+
+#############################################################################
+# DEDICATED SERVER
+#############################################################################
+
+Q2DED_OBJS = \
+       $(BUILDDIR)/ded/cmd.o \
+       $(BUILDDIR)/ded/cmodel.o \
+       $(BUILDDIR)/ded/common.o \
+       $(BUILDDIR)/ded/crc.o \
+       $(BUILDDIR)/ded/cvar.o \
+       $(BUILDDIR)/ded/files.o \
+       $(BUILDDIR)/ded/md4.o \
+       $(BUILDDIR)/ded/net_chan.o \
+       $(BUILDDIR)/ded/sv_ccmds.o \
+       $(BUILDDIR)/ded/sv_ents.o \
+       $(BUILDDIR)/ded/sv_game.o \
+       $(BUILDDIR)/ded/sv_init.o \
+       $(BUILDDIR)/ded/sv_main.o \
+       $(BUILDDIR)/ded/sv_send.o \
+       $(BUILDDIR)/ded/sv_user.o \
+       $(BUILDDIR)/ded/sv_world.o \
+       $(BUILDDIR)/ded/q_shlinux.o \
+       $(BUILDDIR)/ded/sys_linux.o \
+       $(BUILDDIR)/ded/glob.o \
+       $(BUILDDIR)/ded/net_udp.o \
+       $(BUILDDIR)/ded/q_shared.o \
+       $(BUILDDIR)/ded/pmove.o \
+       $(BUILDDIR)/ded/cl_null.o \
+       $(BUILDDIR)/ded/cd_null.o
+
+$(BUILDDIR)/q2ded : $(Q2DED_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(Q2DED_OBJS) $(LDFLAGS)
+
+$(BUILDDIR)/ded/cmd.o :        $(COMMON_DIR)/cmd.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/cmodel.o :     $(COMMON_DIR)/cmodel.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/common.o :     $(COMMON_DIR)/common.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/crc.o :	 $(COMMON_DIR)/crc.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/cvar.o :	$(COMMON_DIR)/cvar.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/files.o :      $(COMMON_DIR)/files.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/md4.o :	 $(COMMON_DIR)/md4.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/net_chan.o :   $(COMMON_DIR)/net_chan.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/q_shared.o :   $(GAME_DIR)/q_shared.c
+	$(DO_DED_DEBUG_CC)
+
+$(BUILDDIR)/ded/pmove.o :      $(COMMON_DIR)/pmove.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_ccmds.o :   $(SERVER_DIR)/sv_ccmds.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_ents.o :    $(SERVER_DIR)/sv_ents.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_game.o :    $(SERVER_DIR)/sv_game.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_init.o :    $(SERVER_DIR)/sv_init.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_main.o :    $(SERVER_DIR)/sv_main.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_send.o :    $(SERVER_DIR)/sv_send.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_user.o :    $(SERVER_DIR)/sv_user.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sv_world.o :   $(SERVER_DIR)/sv_world.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/q_shlinux.o :  $(LINUX_DIR)/q_shlinux.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/sys_linux.o :  $(LINUX_DIR)/sys_linux.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/glob.o :	$(LINUX_DIR)/glob.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/net_udp.o :    $(LINUX_DIR)/net_udp.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/cd_null.o :    $(NULL_DIR)/cd_null.c
+	$(DO_DED_CC)
+
+$(BUILDDIR)/ded/cl_null.o :    $(NULL_DIR)/cl_null.c
+	$(DO_DED_CC)
+
 
 #############################################################################
 # GAME
@@ -1144,6 +1276,7 @@ ROGUE_OBJS = \
 	$(BUILDDIR)/rogue/p_weapon.o \
 	$(BUILDDIR)/rogue/q_shared.o
 
+
 $(BUILDDIR)/rogue/game$(ARCH).$(SHLIBEXT) : $(ROGUE_OBJS)
 	$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(ROGUE_OBJS)
 
@@ -1171,10 +1304,10 @@ $(BUILDDIR)/rogue/g_func.o :       $(ROGUE_DIR)/g_func.c
 $(BUILDDIR)/rogue/g_items.o :      $(ROGUE_DIR)/g_items.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/g_main.o :       $(ROGUE_DIR)/g_main.c
+$(BUILDDIR)/rogue/g_main.o :	$(ROGUE_DIR)/g_main.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/g_misc.o :       $(ROGUE_DIR)/g_misc.c
+$(BUILDDIR)/rogue/g_misc.o :	$(ROGUE_DIR)/g_misc.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/rogue/g_monster.o :    $(ROGUE_DIR)/g_monster.c
@@ -1198,10 +1331,10 @@ $(BUILDDIR)/rogue/g_newtrig.o :    $(ROGUE_DIR)/g_newtrig.c
 $(BUILDDIR)/rogue/g_newweap.o :    $(ROGUE_DIR)/g_newweap.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/g_phys.o :       $(ROGUE_DIR)/g_phys.c
+$(BUILDDIR)/rogue/g_phys.o :	$(ROGUE_DIR)/g_phys.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/g_save.o :       $(ROGUE_DIR)/g_save.c
+$(BUILDDIR)/rogue/g_save.o :	$(ROGUE_DIR)/g_save.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/rogue/g_spawn.o :      $(ROGUE_DIR)/g_spawn.c
@@ -1285,7 +1418,7 @@ $(BUILDDIR)/rogue/m_insane.o :     $(ROGUE_DIR)/m_insane.c
 $(BUILDDIR)/rogue/m_medic.o :      $(ROGUE_DIR)/m_medic.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/m_move.o :       $(ROGUE_DIR)/m_move.c
+$(BUILDDIR)/rogue/m_move.o :	$(ROGUE_DIR)/m_move.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/rogue/m_mutant.o :     $(ROGUE_DIR)/m_mutant.c
@@ -1303,7 +1436,7 @@ $(BUILDDIR)/rogue/m_stalker.o :    $(ROGUE_DIR)/m_stalker.c
 $(BUILDDIR)/rogue/m_supertank.o :  $(ROGUE_DIR)/m_supertank.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/m_tank.o :       $(ROGUE_DIR)/m_tank.c
+$(BUILDDIR)/rogue/m_tank.o :	$(ROGUE_DIR)/m_tank.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/rogue/m_turret.o :     $(ROGUE_DIR)/m_turret.c
@@ -1318,13 +1451,13 @@ $(BUILDDIR)/rogue/m_widow2.o :     $(ROGUE_DIR)/m_widow2.c
 $(BUILDDIR)/rogue/p_client.o :     $(ROGUE_DIR)/p_client.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/p_hud.o :        $(ROGUE_DIR)/p_hud.c
+$(BUILDDIR)/rogue/p_hud.o :	 $(ROGUE_DIR)/p_hud.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/rogue/p_trail.o :      $(ROGUE_DIR)/p_trail.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/rogue/p_view.o :       $(ROGUE_DIR)/p_view.c
+$(BUILDDIR)/rogue/p_view.o :	$(ROGUE_DIR)/p_view.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/rogue/p_weapon.o :     $(ROGUE_DIR)/p_weapon.c
@@ -1404,13 +1537,13 @@ $(BUILDDIR)/ref_soft/r_aclip.o :      $(REF_SOFT_DIR)/r_aclip.c
 $(BUILDDIR)/ref_soft/r_alias.o :      $(REF_SOFT_DIR)/r_alias.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/ref_soft/r_bsp.o :        $(REF_SOFT_DIR)/r_bsp.c
+$(BUILDDIR)/ref_soft/r_bsp.o :	 $(REF_SOFT_DIR)/r_bsp.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/ref_soft/r_draw.o :       $(REF_SOFT_DIR)/r_draw.c
+$(BUILDDIR)/ref_soft/r_draw.o :	$(REF_SOFT_DIR)/r_draw.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/ref_soft/r_edge.o :       $(REF_SOFT_DIR)/r_edge.c
+$(BUILDDIR)/ref_soft/r_edge.o :	$(REF_SOFT_DIR)/r_edge.c
 	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/ref_soft/r_image.o :      $(REF_SOFT_DIR)/r_image.c
@@ -1614,6 +1747,7 @@ clean2:
 	$(QUAKE2_AS_OBJS) \
 	$(GAME_OBJS) \
 	$(CTF_OBJS) \
+	$(ROGUE_OBJS) \
 	$(XATRIX_OBJS) \
 	$(REF_SOFT_OBJS) \
 	$(REF_SOFT_SVGA_OBJS) \
