@@ -250,6 +250,9 @@ static cvar_t	*vid_ypos;			// Y coordinate of window position
 
 static qboolean	mlooking;
 
+// stencilbuffer shadows   
+qboolean have_stencil = false;
+
 // state struct passed in Init
 static in_state_t	*in_state;
 

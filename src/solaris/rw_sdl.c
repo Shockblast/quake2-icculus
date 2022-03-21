@@ -83,6 +83,9 @@ static cvar_t	*in_mouse;
 
 static qboolean	mlooking;
 
+// stencilbuffer shadows   
+qboolean have_stencil = false;
+
 // state struct passed in Init
 static in_state_t	*in_state;
 
@@ -637,9 +640,10 @@ static qboolean GLimp_InitGraphics( qboolean fullscreen )
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 5);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 5);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 5);
+	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 1);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	
+
 	flags = SDL_OPENGL;
 	if (fullscreen)
 		flags |= SDL_FULLSCREEN;
@@ -649,6 +653,20 @@ static qboolean GLimp_InitGraphics( qboolean fullscreen )
 	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 0, flags)) == NULL) {
 		Sys_Error("(SDLGL) SDL SetVideoMode failed: %s\n", SDL_GetError());
 		return false;
+	}
+
+	// stencilbuffer shadows
+	{
+		int stencil_bits;
+
+		have_stencil = false;
+
+		if (!SDL_GL_GetAttribute(SDL_GL_STENCIL_SIZE, &stencil_bits)) {
+			ri.Con_Printf(PRINT_ALL, "I: got %d bits of stencil\n", stencil_bits);
+			if (stencil_bits >= 1) {
+				have_stencil = true;
+			}
+		}
 	}
 
 	SDL_WM_SetCaption("Quake II", "Quake II");

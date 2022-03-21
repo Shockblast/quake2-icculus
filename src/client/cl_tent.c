@@ -88,8 +88,9 @@ void CL_BlueBlasterParticles (vec3_t org, vec3_t dir);
 
 #ifdef QMAX
 void CL_Explosion_Particle (vec3_t org, float scale, qboolean large, qboolean rocket);
-void CL_ExplosionParticles (vec3_t org, float alpha);
-#define EXPLOSION_PARTICLES(x) CL_ExplosionParticles((x), 1);
+//void CL_ExplosionParticles (vec3_t org, float alpha);
+void CL_ExplosionParticles (vec3_t org);
+#define EXPLOSION_PARTICLES(x) CL_ExplosionParticles((x));
 #else
 void CL_ExplosionParticles (vec3_t org);
 void CL_Explosion_Particle (vec3_t org, float size, qboolean large, qboolean rocket);
@@ -923,14 +924,15 @@ void CL_ParseTEnt (void)
 #ifdef QMAX
 		CL_G_Explode_SP(pos);
 
-//		if (type!=TE_GRENADE_EXPLOSION_WATER)
-//			CL_Radius_Explode_SP(pos, 1.25);
-		CL_ExplosionParticles (pos,1.25);
+		//		if (type!=TE_GRENADE_EXPLOSION_WATER)
+		//	CL_Radius_Explode_SP(pos, 1.25);
+		//		CL_ExplosionParticles (pos,1.25);
+		CL_ExplosionParticles (pos);
 #else
 		ex = CL_AllocExplosion ();
 		VectorCopy (pos, ex->ent.origin);
 		ex->type = ex_poly;
-		ex->ent.flags = RF_FULLBRIGHT;
+		ex->ent.flags = RF_FULLBRIGHT|RF_NOSHADOW;
 		ex->start = cl.frame.servertime - 100;
 		ex->light = 350;
 		ex->lightcolor[0] = 1.0;
@@ -953,12 +955,14 @@ void CL_ParseTEnt (void)
 		MSG_ReadPos (&net_message, pos);
 #ifdef QMAX
 		CL_R_Explode_SP(pos);
-		CL_ExplosionParticles (pos, 1);
+//		CL_ExplosionParticles (pos, 1);
+//		CL_ExplosionParticles (pos);
+
 #else
 		ex = CL_AllocExplosion ();
 		VectorCopy (pos, ex->ent.origin);
 		ex->type = ex_poly;
-		ex->ent.flags = RF_FULLBRIGHT;
+		ex->ent.flags = RF_FULLBRIGHT|RF_NOSHADOW;
 		ex->start = cl.frame.servertime - 100;
 		ex->light = 350;
 		ex->lightcolor[0] = 1.0; 
@@ -988,7 +992,8 @@ void CL_ParseTEnt (void)
 //		else
 //		{
 			CL_Explosion_Particle (pos, 100, true, true);
-			CL_ExplosionParticles (pos, 2);
+			//CL_ExplosionParticles (pos, 2);
+			CL_ExplosionParticles (pos);
 //			CL_Radius_Explode_SP(pos, 2);
 //		}
 		S_StartSound (pos, 0, 0, cl_sfx_rockexp, 1, ATTN_NORM, 0);
@@ -998,8 +1003,9 @@ void CL_ParseTEnt (void)
 #ifdef QMAX
 	  MSG_ReadPos (&net_message, pos); 
 	  CL_Explosion_Particle (pos, 50, true, true);
-	  CL_ExplosionParticles (pos, 0.6666666);
-	  //		CL_Radius_Explode_SP(pos, 0.6666666);
+	  CL_ExplosionParticles (pos);
+//	  CL_ExplosionParticles (pos, 0.6666666);
+//	  CL_Radius_Explode_SP(pos, 0.6666666);
 	  
 	  S_StartSound (pos, 0, 0, cl_sfx_grenexp, 1, ATTN_NORM, 0);
 	  break;
@@ -1010,12 +1016,13 @@ void CL_ParseTEnt (void)
 		MSG_ReadPos (&net_message, pos);
 #ifdef QMAX
 		CL_R_Explode_SP(pos);
-		CL_ExplosionParticles (pos, 1);	
+		//		CL_ExplosionParticles (pos, 1);	
+		CL_ExplosionParticles (pos);	
 #else
 		ex = CL_AllocExplosion ();
 		VectorCopy (pos, ex->ent.origin);
 		ex->type = ex_poly;
-		ex->ent.flags = RF_FULLBRIGHT;
+		ex->ent.flags = RF_FULLBRIGHT|RF_NOSHADOW;
 		ex->start = cl.frame.servertime - 100;
 		ex->light = 350;
 		ex->lightcolor[0] = 1.0;
@@ -1043,7 +1050,7 @@ void CL_ParseTEnt (void)
 		ex = CL_AllocExplosion ();
 		VectorCopy (pos, ex->ent.origin);
 		ex->type = ex_poly;
-		ex->ent.flags = RF_FULLBRIGHT;
+		ex->ent.flags = RF_FULLBRIGHT|RF_NOSHADOW;
 		ex->start = cl.frame.servertime - 100;
 		ex->light = 350;
 		ex->lightcolor[0] = 0.0;
@@ -1197,7 +1204,7 @@ void CL_ParseTEnt (void)
 		ex = CL_AllocExplosion ();
 		VectorCopy (pos, ex->ent.origin);
 		ex->type = ex_poly;
-		ex->ent.flags = RF_FULLBRIGHT;
+		ex->ent.flags = RF_FULLBRIGHT|RF_NOSHADOW;
 		ex->start = cl.frame.servertime - 100;
 		ex->light = 350;
 		ex->lightcolor[0] = 1.0;

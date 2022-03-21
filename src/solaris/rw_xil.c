@@ -104,6 +104,9 @@ static cvar_t	*in_mouse;
 
 static qboolean	mlooking;
 
+// stencilbuffer shadows
+qboolean have_stencil = false;
+
 // state struct passed in Init
 static in_state_t	*in_state;
 

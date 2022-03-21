@@ -1,11 +1,11 @@
-/server.h/1.1.1.1/Fri Sep  6 00:58:32 2002//
-/sv_ccmds.c/1.2/Fri Sep  6 00:58:32 2002//
-/sv_ents.c/1.2/Fri Sep  6 00:58:32 2002//
-/sv_game.c/1.2/Fri Sep  6 00:58:32 2002//
-/sv_init.c/1.1.1.1/Fri Sep  6 00:58:32 2002//
-/sv_main.c/1.2/Fri Sep  6 00:58:32 2002//
-/sv_null.c/1.1.1.1/Fri Sep  6 00:58:32 2002//
-/sv_send.c/1.1.1.1/Fri Sep  6 00:58:32 2002//
-/sv_user.c/1.2/Fri Sep  6 00:58:32 2002//
-/sv_world.c/1.1.1.1/Fri Sep  6 00:58:32 2002//
+/server.h/1.1.1.1/Tue Oct  8 20:54:26 2002//
+/sv_ccmds.c/1.2/Tue Oct  8 20:54:27 2002//
+/sv_ents.c/1.2/Tue Oct  8 20:54:27 2002//
+/sv_game.c/1.2/Tue Oct  8 20:54:27 2002//
+/sv_init.c/1.1.1.1/Tue Oct  8 20:54:27 2002//
+/sv_main.c/1.2/Tue Oct  8 20:54:27 2002//
+/sv_null.c/1.1.1.1/Tue Oct  8 20:54:27 2002//
+/sv_send.c/1.1.1.1/Tue Oct  8 20:54:27 2002//
+/sv_user.c/1.2/Tue Oct  8 20:54:27 2002//
+/sv_world.c/1.1.1.1/Tue Oct  8 20:54:27 2002//
 D

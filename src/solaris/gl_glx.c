@@ -100,6 +100,9 @@ static cvar_t	*in_mouse;
 static qboolean	mlooking;
 static qboolean mouse_active = false;
 
+// stencilbuffer shadows   
+qboolean have_stencil = false;
+
 // state struct passed in Init
 static in_state_t	*in_state;
 
@@ -731,6 +734,16 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
     GLX_BLUE_SIZE, 1,
     GLX_DOUBLEBUFFER,
     GLX_DEPTH_SIZE, 1,
+    GLX_STENCIL_SIZE, 1,
+    None
+  };
+  int attrib_nostencil[] = {
+    GLX_RGBA,
+    GLX_RED_SIZE, 1,
+    GLX_GREEN_SIZE, 1,
+    GLX_BLUE_SIZE, 1,
+    GLX_DOUBLEBUFFER,
+    GLX_DEPTH_SIZE, 1,
     None
   };
   Window root;
@@ -777,9 +790,46 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 
   visinfo = qglXChooseVisual(dpy, scrnum, attrib);
   if (!visinfo) {
-    fprintf(stderr, "Error couldn't get an RGB, Double-buffered, Depth visual\n");
-    return rserr_invalid_mode;
+    fprintf(stderr, "Error couldn't get an RGBA, DOUBLEBUFFER, DEPTH, STENCIL visual\n");
+    visinfo = qglXChooseVisual(dpy, scrnum, attrib_nostencil);
+    if (!visinfo) {
+      fprintf(stderr, "E: couldn't get an RGBA, DOUBLEBUFFER, DEPTH visual\n");
+      return rserr_invalid_mode;
+    }
   }
+
+#if 0
+	/* do some pantsness */
+	{
+		int red_bits, blue_bits, green_bits, depth_bits, alpha_bits;
+
+		glXGetConfig(dpy, visinfo, GLX_RED_SIZE, &red_bits);
+		glXGetConfig(dpy, visinfo, GLX_BLUE_SIZE, &blue_bits);
+		glXGetConfig(dpy, visinfo, GLX_GREEN_SIZE, &green_bits);
+		glXGetConfig(dpy, visinfo, GLX_DEPTH_SIZE, &depth_bits);
+		glXGetConfig(dpy, visinfo, GLX_ALPHA_SIZE, &alpha_bits);
+
+		ri.Con_Printf(PRINT_ALL, "I: got %d bits of red\n", red_bits);
+		ri.Con_Printf(PRINT_ALL, "I: got %d bits of blue\n", blue_bits);
+		ri.Con_Printf(PRINT_ALL, "I: got %d bits of green\n", green_bits);
+		ri.Con_Printf(PRINT_ALL, "I: got %d bits of depth\n", depth_bits);
+		ri.Con_Printf(PRINT_ALL, "I: got %d bits of alpha\n", alpha_bits);
+	}
+#endif
+
+	/* stencilbuffer shadows */
+	{
+		int stencil_bits;
+
+		if (!glXGetConfig(dpy, visinfo, GLX_STENCIL_SIZE, &stencil_bits)) {
+			ri.Con_Printf(PRINT_ALL, "I: got %d bits of stencil\n", stencil_bits);
+			if (stencil_bits >= 1) {
+				have_stencil = true;
+			}
+		}
+	}
+
+
 
   /* window attributes */
   attr.background_pixel = 0;
