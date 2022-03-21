@@ -9,6 +9,12 @@ To build fully optimized binaries: cd quake2 && make build_release
 
 I'll post any updates I make at http://www.icculus.org/~relnev/
 
+v0.0.4: [12/23/01]
+-------
++ Mouse Wheel (SDL buttons 4 and 5).
++ Fixed bug with changing the sound options in game (using the menus).
++ Fixed Makefile to build both build_debug and build_release by default.
+
 v0.0.3: [12/22/01]
 -------
 + Fixed the texture wrapping with movies.

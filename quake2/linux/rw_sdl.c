@@ -312,24 +312,50 @@ int XLateKey(unsigned int keysym)
 				key = keysym;
 			break;
 	}
-	
+
 	return key;		
 }
 
 void GetEvent(SDL_Event *event)
 {
 	unsigned int bstate;
+	unsigned int key;
 	
 	switch(event->type) {
+	case SDL_MOUSEBUTTONDOWN:
+		if (event->button.button == 4) {
+			keyq[keyq_head].key = K_MWHEELUP;
+			keyq[keyq_head].down = true;
+			keyq_head = (keyq_head + 1) & 63;
+			keyq[keyq_head].key = K_MWHEELUP;
+			keyq[keyq_head].down = false;
+			keyq_head = (keyq_head + 1) & 63;
+		} else if (event->button.button == 5) {
+			keyq[keyq_head].key = K_MWHEELDOWN;
+			keyq[keyq_head].down = true;
+			keyq_head = (keyq_head + 1) & 63;
+			keyq[keyq_head].key = K_MWHEELDOWN;
+			keyq[keyq_head].down = false;
+			keyq_head = (keyq_head + 1) & 63;
+		}
+		break;
+	case SDL_MOUSEBUTTONUP:
+		break;
 	case SDL_KEYDOWN:
-		keyq[keyq_head].key = XLateKey(event->key.keysym.sym);
-		keyq[keyq_head].down = true;
-		keyq_head = (keyq_head + 1) & 63;
+		key = XLateKey(event->key.keysym.sym);
+		if (key) {
+			keyq[keyq_head].key = key;
+			keyq[keyq_head].down = true;
+			keyq_head = (keyq_head + 1) & 63;
+		}
 		break;
 	case SDL_KEYUP:
-		keyq[keyq_head].key = XLateKey(event->key.keysym.sym);
-		keyq[keyq_head].down = false;
-		keyq_head = (keyq_head + 1) & 63;
+		key = XLateKey(event->key.keysym.sym);
+		if (key) {
+			keyq[keyq_head].key = key;
+			keyq[keyq_head].down = false;
+			keyq_head = (keyq_head + 1) & 63;
+		}
 		break;
 #if 0
 	case MotionNotify:
@@ -380,6 +406,14 @@ void GetEvent(SDL_Event *event)
 
 /*****************************************************************************/
 
+static void mySDL_Quit()
+{
+	fprintf(stderr, "Shutting down renderer module...\n");
+	SDL_WM_GrabInput(SDL_GRAB_OFF);
+//	SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
+	SDL_Quit();
+}
+	
 /*
 ** SWimp_Init
 **
@@ -393,7 +427,10 @@ int SWimp_Init( void *hInstance, void *wndProc )
 		return false;
 	}
 	
-	atexit(SDL_Quit);
+	fprintf(stderr, "Registering SDL atexit routine...\n");
+	atexit(mySDL_Quit);
+	
+//	SDL_EnableKeyRepeat(0, SDL_DEFAULT_REPEAT_INTERVAL);
 	
 // catch signals so i can turn on auto-repeat
 #if 0
@@ -629,7 +666,7 @@ void SWimp_Shutdown( void )
 	if (surface)
 		SDL_FreeSurface(surface);
 	surface == NULL;
-
+	
 	/* SDL_Quit(); */
 	
 	X11_active = false;
@@ -691,6 +728,12 @@ void KBD_Init(Key_Event_fp_t fp)
 void KBD_Update(void)
 {
 	SDL_Event event;
+	static int KBD_Update_Flag;
+	
+	if (KBD_Update_Flag == 1)
+		return;
+	
+	KBD_Update_Flag = 1;
 	
 // get events from x server
 	if (X11_active)
@@ -729,8 +772,14 @@ void KBD_Update(void)
 			keyq_tail = (keyq_tail + 1) & 63;
 		}
 	}
+	
+	KBD_Update_Flag = 0;
 }
 
 void KBD_Close(void)
 {
+	keyq_head = 0;
+	keyq_tail = 0;
+	
+	memset(keyq, 0, sizeof(keyq));
 }
