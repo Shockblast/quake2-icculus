@@ -22,7 +22,7 @@
 		59 Temple Place - Suite 330
 		Boston, MA  02111-1307, USA
 
-	$Id: cd_sdl.c,v 1.1 2001/12/28 10:05:47 relnev Exp $
+	$Id: cd_sdl.c,v 1.3 2002/01/03 05:10:14 relnev Exp $
 */
 
 #include <stdio.h>
@@ -35,6 +35,7 @@ static qboolean enabled = true;
 static qboolean playLooping = false;
 static SDL_CD *cd_id;
 static float cdvolume = 1.0;
+static int lastTrack = 0;
 
 cvar_t	*cd_volume;
 cvar_t *cd_nocd;
@@ -53,11 +54,16 @@ static void CDAudio_Eject()
 void CDAudio_Play(int track, qboolean looping)
 {
 	CDstatus cd_stat;
+
+	lastTrack = track+1;
+
 	if(!cd_id || !enabled) return;
+	
+	cd_stat=SDL_CDStatus(cd_id);
 	
 	if(!cdValid)
 	{
-		if(!CD_INDRIVE(cd_stat=SDL_CDStatus(cd_id)) ||(!cd_id->numtracks)) return;
+		if(!CD_INDRIVE(cd_stat) ||(!cd_id->numtracks)) return;
 		cdValid = true;
 	}
 
@@ -76,7 +82,7 @@ void CDAudio_Play(int track, qboolean looping)
 	if(SDL_CDPlay(cd_id,cd_id->track[track].offset,
 			  cd_id->track[track].length))
 	{
-		Com_DPrintf("CDAudio_Play: Unable to play track: %d\n",track+1);
+		Com_DPrintf("CDAudio_Play: Unable to play track: %d (%s)\n",track+1, SDL_GetError());
 		return;
 	}
 	playLooping = looping;
@@ -92,6 +98,8 @@ void CDAudio_Stop()
 
 	if(SDL_CDStop(cd_id))
 		Com_DPrintf("CDAudio_Stop: Failed to stop track.\n");
+		
+	playLooping = 0;
 }
 
 void CDAudio_Pause()
@@ -110,7 +118,7 @@ void CDAudio_Resume()
 	if(SDL_CDStatus(cd_id) != CD_PAUSED) return;
 
 	if(SDL_CDResume(cd_id))
-		Com_DPrintf("CDAudio_Resume: Failed tp resume track.\n");
+		Com_DPrintf("CDAudio_Resume: Failed to resume track.\n");
 }
 
 void CDAudio_Update()
@@ -131,9 +139,19 @@ void CDAudio_Update()
 		cdvolume = cd_volume->value;
 		return;
 	}
-	if(playLooping && (SDL_CDStatus(cd_id) != CD_PLAYING)
-		 && (SDL_CDStatus(cd_id) != CD_PAUSED))
-		CDAudio_Play(cd_id->cur_track+1,true);
+	
+	if(cd_nocd->value)
+	{
+		CDAudio_Stop();
+		return;
+	}
+	
+	if(playLooping && 
+	   (SDL_CDStatus(cd_id) != CD_PLAYING) && 
+	   (SDL_CDStatus(cd_id) != CD_PAUSED))
+	{
+		CDAudio_Play(lastTrack,true);
+	}
 }
 
 int CDAudio_Init()

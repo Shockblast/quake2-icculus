@@ -175,7 +175,7 @@ void InitGame (void)
 //ZOID
 //This game.dll only supports deathmatch
 	if (!deathmatch->value) {
-		gi.dprintf("Forcing deathmatch.");
+		gi.dprintf("Forcing deathmatch.\n");
 		gi.cvar_set("deathmatch", "1");
 	}
 	//force coop off
@@ -302,6 +302,8 @@ void WriteField2 (FILE *f, field_t *field, byte *base)
 			len = strlen(*(char **)p) + 1;
 			fwrite (*(char **)p, len, 1, f);
 		}
+		break;
+	default:
 		break;
 	}
 }

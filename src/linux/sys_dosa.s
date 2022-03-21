@@ -4,6 +4,7 @@
 
 #include "qasm.h"
 
+#if	id386
 
 	.data
 
@@ -92,3 +93,4 @@ C(Sys_SetFPCW):
 
 	ret
 
+#endif	// id386

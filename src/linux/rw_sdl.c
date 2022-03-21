@@ -13,14 +13,11 @@
 ** SWimp_SwitchFullscreen
 */
 
-#include <ctype.h>
-#include <sys/time.h>
-#include <sys/types.h>
 #include <unistd.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
 
 #include "SDL.h"
 
@@ -43,7 +40,10 @@
 static qboolean                 X11_active = false;
 
 static SDL_Surface *surface;
-static int sdl_palettemode;
+
+#ifndef OPENGL
+static unsigned int sdl_palettemode;
+#endif
 
 struct
 {
@@ -76,15 +76,12 @@ static int   mouse_x, mouse_y;
 static int	old_mouse_x, old_mouse_y;
 static int		mx, my;
 static float old_windowed_mouse;
-static int p_mouse_x, p_mouse_y;
 
 static cvar_t	*_windowed_mouse;
 static cvar_t	*m_filter;
 static cvar_t	*in_mouse;
 
-static int blah1[65536*8];
 static qboolean	mlooking;
-static int blah2[65536*8];
 
 // state struct passed in Init
 static in_state_t	*in_state;
@@ -115,9 +112,6 @@ static void RW_IN_MLookUp (void)
 
 void RW_IN_Init(in_state_t *in_state_p)
 {
-	int mtype;
-	int i;
-
 	in_state = in_state_p;
 
 	// mouse variables
@@ -371,7 +365,6 @@ static unsigned char KeyStates[SDLK_LAST];
 
 void GetEvent(SDL_Event *event)
 {
-	unsigned int bstate;
 	unsigned int key;
 	
 	switch(event->type) {
@@ -499,6 +492,40 @@ int GLimp_Init( void *hInstance, void *wndProc )
 }
 #endif
 
+static void SetSDLIcon()
+{
+#include "q2icon.xbm"
+	SDL_Surface *icon;
+	SDL_Color color;
+	Uint8 *ptr;
+	int i, mask;
+
+	icon = SDL_CreateRGBSurface(SDL_SWSURFACE, q2icon_width, q2icon_height, 8, 0, 0, 0, 0);
+	if (icon == NULL)
+		return; /* oh well... */
+	SDL_SetColorKey(icon, SDL_SRCCOLORKEY, 0);
+
+	color.r = 255;
+	color.g = 255;
+	color.b = 255;
+	SDL_SetColors(icon, &color, 0, 1); /* just in case */
+	color.r = 0;
+	color.g = 16;
+	color.b = 0;
+	SDL_SetColors(icon, &color, 1, 1);
+
+	ptr = (Uint8 *)icon->pixels;
+	for (i = 0; i < sizeof(q2icon_bits); i++) {
+		for (mask = 1; mask != 0x100; mask <<= 1) {
+			*ptr = (q2icon_bits[i] & mask) ? 1 : 0;
+			ptr++;
+		}		
+	}
+
+	SDL_WM_SetIcon(icon, NULL);
+	SDL_FreeSurface(icon);
+}
+
 /*
 ** SWimp_InitGraphics
 **
@@ -547,6 +574,8 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 	flags = /*SDL_DOUBLEBUF|*/SDL_SWSURFACE|SDL_HWPALETTE;
 	if (fullscreen)
 		flags |= SDL_FULLSCREEN;
+	
+	SetSDLIcon(); /* currently uses q2icon.xbm data */
 	
 	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 8, flags)) == NULL) {
 		Sys_Error("(SOFTSDL) SDL SetVideoMode failed: %s\n", SDL_GetError());
@@ -598,7 +627,9 @@ static qboolean GLimp_InitGraphics( qboolean fullscreen )
 	flags = SDL_OPENGL;
 	if (fullscreen)
 		flags |= SDL_FULLSCREEN;
-		
+	
+	SetSDLIcon(); /* currently uses q2icon.xbm data */
+	
 	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 0, flags)) == NULL) {
 		Sys_Error("(SDLGL) SDL SetVideoMode failed: %s\n", SDL_GetError());
 		return false;

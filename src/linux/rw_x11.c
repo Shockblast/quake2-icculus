@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/mman.h>
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -64,6 +65,7 @@ static GC				x_gc;
 static Visual			*x_vis;
 static XVisualInfo		*x_visinfo;
 static int win_x, win_y;
+static Atom wmDeleteWindow;
 
 #define KEY_MASK (KeyPressMask | KeyReleaseMask)
 #define MOUSE_MASK (ButtonPressMask | ButtonReleaseMask | \
@@ -166,15 +168,15 @@ PIXEL24 xlib_rgb24(int r,int g,int b)
 
 void st2_fixup( XImage *framebuf, int x, int y, int width, int height)
 {
-	int xi,yi;
-	unsigned char *src;
+	int yi;
+	byte *src;
 	PIXEL16 *dest;
 	register int count, n;
 
 	if( (x<0)||(y<0) )return;
 
 	for (yi = y; yi < (y+height); yi++) {
-		src = &framebuf->data [yi * framebuf->bytes_per_line];
+		src = (byte *)&framebuf->data [yi * framebuf->bytes_per_line];
 
 		// Duff's Device
 		count = width;
@@ -202,15 +204,15 @@ void st2_fixup( XImage *framebuf, int x, int y, int width, int height)
 
 void st3_fixup( XImage *framebuf, int x, int y, int width, int height)
 {
-	int xi,yi;
-	unsigned char *src;
+	int yi;
+	byte *src;
 	PIXEL24 *dest;
 	register int count, n;
 
 	if( (x<0)||(y<0) )return;
 
 	for (yi = y; yi < (y+height); yi++) {
-		src = &framebuf->data [yi * framebuf->bytes_per_line];
+		src = (byte *)&framebuf->data [yi * framebuf->bytes_per_line];
 
 		// Duff's Device
 		count = width;
@@ -293,15 +295,12 @@ static void RW_IN_MLookUp (void)
 
 void RW_IN_Init(in_state_t *in_state_p)
 {
-	int mtype;
-	int i;
-
 	in_state = in_state_p;
 
 	// mouse variables
 	m_filter = ri.Cvar_Get ("m_filter", "0", 0);
-    in_mouse = ri.Cvar_Get ("in_mouse", "0", CVAR_ARCHIVE);
-    in_dgamouse = ri.Cvar_Get ("in_dgamouse", "1", CVAR_ARCHIVE);
+	in_mouse = ri.Cvar_Get ("in_mouse", "0", CVAR_ARCHIVE);
+	in_dgamouse = ri.Cvar_Get ("in_dgamouse", "1", CVAR_ARCHIVE);
 	freelook = ri.Cvar_Get( "freelook", "0", 0 );
 	lookstrafe = ri.Cvar_Get ("lookstrafe", "0", 0);
 	sensitivity = ri.Cvar_Get ("sensitivity", "3", 0);
@@ -318,16 +317,6 @@ void RW_IN_Init(in_state_t *in_state_p)
 	mouse_avail = true;
 }
 
-void RW_IN_Shutdown(void)
-{
-	if (mouse_avail) {
-		mouse_avail = false;
-		
-		ri.Cmd_RemoveCommand ("+mlook");
-		ri.Cmd_RemoveCommand ("-mlook");
-		ri.Cmd_RemoveCommand ("force_centerview");
-	}
-}
 
 /*
 ===========
@@ -510,7 +499,20 @@ void RW_IN_Activate(qboolean active)
 	if (active)
 		IN_ActivateMouse();
 	else
-		IN_DeactivateMouse ();
+		IN_DeactivateMouse();
+}
+
+void RW_IN_Shutdown(void)
+{
+	if (mouse_avail) {
+		RW_IN_Activate (false);
+		
+		mouse_avail = false;
+		
+		ri.Cmd_RemoveCommand ("+mlook");
+		ri.Cmd_RemoveCommand ("-mlook");
+		ri.Cmd_RemoveCommand ("force_centerview");
+	}
 }
 
 /*****************************************************************************/
@@ -842,6 +844,10 @@ void HandleEvents(void)
 			config_notify = 1;
 			break;
 
+		case ClientMessage:
+			if (event.xclient.data.l[0] == wmDeleteWindow)
+				ri.Cmd_ExecuteText(EXEC_NOW, "quit");
+			break;
 		default:
 			if (doShm && event.type == x_shmeventtype)
 				oktodraw = true;
@@ -871,7 +877,7 @@ int SWimp_Init( void *hInstance, void *wndProc )
 	vid_ypos = ri.Cvar_Get ("vid_ypos", "22", CVAR_ARCHIVE);
 
 // open the display
-	dpy = XOpenDisplay(0);
+	dpy = XOpenDisplay(NULL);
 	if (!dpy)
 	{
 		if (getenv("DISPLAY"))
@@ -906,11 +912,12 @@ int SWimp_Init( void *hInstance, void *wndProc )
 */
 static qboolean SWimp_InitGraphics( qboolean fullscreen )
 {
-	int pnum, i;
+	int i;
 	XVisualInfo template;
 	int num_visuals;
 	int template_mask;
 	Window root;
+	//int pnum;
 
 	srandom(getpid());
 
@@ -983,6 +990,7 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 	   int attribmask = CWEventMask  | CWColormap | CWBorderPixel;
 	   XSetWindowAttributes attribs;
 	   XSizeHints *sizehints;
+	   XWMHints *wmhints;
 	   Colormap tmpcmap;
 	   
 	   tmpcmap = XCreateColormap(dpy, root, x_vis, AllocNone);
@@ -1008,13 +1016,38 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 			sizehints->flags = PMinSize | PMaxSize | PBaseSize;
 		}
 		
+		wmhints = XAllocWMHints();
+		if (wmhints) {
+			#include "q2icon.xbm"
+
+			Pixmap icon_pixmap, icon_mask;
+			unsigned long fg, bg;
+			int i;
+		
+			fg = BlackPixel(dpy, x_visinfo->screen);
+			bg = WhitePixel(dpy, x_visinfo->screen);
+			icon_pixmap = XCreatePixmapFromBitmapData(dpy, win, (char *)q2icon_bits, q2icon_width, q2icon_height, fg, bg, x_visinfo->depth);
+			for (i = 0; i < sizeof(q2icon_bits); i++)
+				q2icon_bits[i] = ~q2icon_bits[i];
+			icon_mask = XCreatePixmapFromBitmapData(dpy, win, (char *)q2icon_bits, q2icon_width, q2icon_height, bg, fg, x_visinfo->depth); 
+		
+			wmhints->flags = IconPixmapHint|IconMaskHint;
+			wmhints->icon_pixmap = icon_pixmap;
+			wmhints->icon_mask = icon_mask;
+		}
+
 		XSetWMProperties(dpy, win, NULL, NULL, NULL, 0,
-			sizehints, None, None);
+			sizehints, wmhints, None);
 		if (sizehints)
 			XFree(sizehints);
-		
+		if (wmhints)
+			XFree(wmhints);
+			
 		XStoreName(dpy, win, "Quake II");
 
+		wmDeleteWindow = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+		XSetWMProtocols(dpy, win, &wmDeleteWindow, 1);
+		
 		if (x_visinfo->class != TrueColor)
 			XFreeColormap(dpy, tmpcmap);
 	}
@@ -1043,7 +1076,6 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 
 // wait for first exposure event
 	{
-		XEvent event;
 		exposureflag = false;
 		do
 		{
@@ -1083,7 +1115,7 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 
 	current_framebuffer = 0;
 	vid.rowbytes = x_framebuffer[0]->bytes_per_line;
-	vid.buffer = x_framebuffer[0]->data;
+	vid.buffer = (byte *)x_framebuffer[0]->data;
 
 //	XSynchronize(dpy, False);
 
@@ -1135,7 +1167,7 @@ void SWimp_EndFrame (void)
 		while (!oktodraw) 
 			HandleEvents();
 		current_framebuffer = !current_framebuffer;
-		vid.buffer = x_framebuffer[current_framebuffer]->data;
+		vid.buffer = (byte *)x_framebuffer[current_framebuffer]->data;
 		XSync(dpy, False);
 	}
 	else
@@ -1242,6 +1274,8 @@ void SWimp_Shutdown( void )
 
 	XDestroyWindow(	dpy, win );
 
+	win = 0;
+	
 //	XAutoRepeatOn(dpy);
 //	XCloseDisplay(dpy);
 

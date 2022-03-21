@@ -29,11 +29,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 
 #include <GL/gl.h>
-
-#ifdef __linux__
-//#include <GL/fxmesa.h>
-#include <GL/glx.h>
-#endif
+#include <GL/glext.h>
 
 qboolean QGL_Init( const char *dllname );
 void     QGL_Shutdown( void );
@@ -381,7 +377,7 @@ extern  void ( APIENTRY * qglViewport )(GLint x, GLint y, GLsizei width, GLsizei
 
 extern	void ( APIENTRY * qglPointParameterfEXT)( GLenum param, GLfloat value );
 extern	void ( APIENTRY * qglPointParameterfvEXT)( GLenum param, const GLfloat *value );
-extern	void ( APIENTRY * qglColorTableEXT)( int, int, int, int, int, const void * );
+extern	void ( APIENTRY * qglColorTableEXT)( GLenum, GLenum, GLsizei, GLenum, GLenum, const GLvoid * );
 
 extern	void ( APIENTRY * qglLockArraysEXT) (int , int);
 extern	void ( APIENTRY * qglUnlockArraysEXT) (void);
@@ -437,24 +433,6 @@ extern void *qwglGetProcAddress(char *symbol);
 
 extern void (*qgl3DfxSetPaletteEXT)(GLuint *);
 
-/*
-//FX Mesa Functions
-extern fxMesaContext (*qfxMesaCreateContext)(GLuint win, GrScreenResolution_t, GrScreenRefresh_t, const GLint attribList[]);
-extern fxMesaContext (*qfxMesaCreateBestContext)(GLuint win, GLint width, GLint height, const GLint attribList[]);
-extern void (*qfxMesaDestroyContext)(fxMesaContext ctx);
-extern void (*qfxMesaMakeCurrent)(fxMesaContext ctx);
-extern fxMesaContext (*qfxMesaGetCurrentContext)(void);
-extern void (*qfxMesaSwapBuffers)(void);
-*/
-
-//GLX Functions
-extern XVisualInfo * (*qglXChooseVisual)( Display *dpy, int screen, int *attribList );
-extern GLXContext (*qglXCreateContext)( Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct );
-extern void (*qglXDestroyContext)( Display *dpy, GLXContext ctx );
-extern Bool (*qglXMakeCurrent)( Display *dpy, GLXDrawable drawable, GLXContext ctx);
-extern void (*qglXCopyContext)( Display *dpy, GLXContext src, GLXContext dst, GLuint mask );
-extern void (*qglXSwapBuffers)( Display *dpy, GLXDrawable drawable );
-
 // 3dfxSetPaletteEXT shunt
 void Fake_glColorTableEXT( GLenum target, GLenum internalformat,
                              GLsizei width, GLenum format, GLenum type,
@@ -462,6 +440,13 @@ void Fake_glColorTableEXT( GLenum target, GLenum internalformat,
 
 #endif // linux
 
+/* deprecated */
+#define GL_TEXTURE0_SGIS					0x835E
+#define GL_TEXTURE1_SGIS					0x835F
+
+extern int QGL_TEXTURE0, QGL_TEXTURE1; /* ARB/SGIS texture defs */
+
+#if 0 /* these are in glext.h */
 /*
 ** extension constants
 */
@@ -476,11 +461,8 @@ void Fake_glColorTableEXT( GLenum target, GLenum internalformat,
 #define GL_SHARED_TEXTURE_PALETTE_EXT		0x81FB
 #endif
 
-#define GL_TEXTURE0_SGIS					0x835E
-#define GL_TEXTURE1_SGIS					0x835F
 #define GL_TEXTURE0_ARB						0x84C0
 #define GL_TEXTURE1_ARB						0x84C1
-
-extern int GL_TEXTURE0, GL_TEXTURE1;
+#endif
 
 #endif

@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <stdarg.h>
 #include <stdio.h>
 #include <signal.h>
+#include <dlfcn.h>
 
 #include "../ref_gl/gl_local.h"
 
@@ -46,7 +47,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "../linux/rw_linux.h"
 #include "../linux/glw_linux.h"
 
-#include <GL/glx.h>
+#include <X11/Xlib.h>
 
 #include <X11/keysym.h>
 #include <X11/cursorfont.h>
@@ -54,17 +55,28 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <X11/extensions/xf86dga.h>
 #include <X11/extensions/xf86vmode.h>
 
+#include <GL/glx.h>
+
 glwstate_t glw_state;
 
 static Display *dpy = NULL;
 static int scrnum;
 static Window win;
 static GLXContext ctx = NULL;
+static Atom wmDeleteWindow;
 
 #define KEY_MASK (KeyPressMask | KeyReleaseMask)
 #define MOUSE_MASK (ButtonPressMask | ButtonReleaseMask | \
 		    PointerMotionMask | ButtonMotionMask )
 #define X_MASK (KEY_MASK | MOUSE_MASK | VisibilityChangeMask | StructureNotifyMask )
+
+//GLX Functions
+static XVisualInfo * (*qglXChooseVisual)( Display *dpy, int screen, int *attribList );
+static GLXContext (*qglXCreateContext)( Display *dpy, XVisualInfo *vis, GLXContext shareList, Bool direct );
+static void (*qglXDestroyContext)( Display *dpy, GLXContext ctx );
+static Bool (*qglXMakeCurrent)( Display *dpy, GLXDrawable drawable, GLXContext ctx);
+static void (*qglXCopyContext)( Display *dpy, GLXContext src, GLXContext dst, GLuint mask );
+static void (*qglXSwapBuffers)( Display *dpy, GLXDrawable drawable );
 
 /*****************************************************************************/
 /* MOUSE                                                                     */
@@ -85,7 +97,6 @@ static cvar_t	*in_dgamouse;
 static cvar_t	*r_fakeFullscreen;
 
 static XF86VidModeModeInfo **vidmodes;
-static int default_dotclock_vidmode;
 static int num_vidmodes;
 static qboolean vidmode_active = false;
 
@@ -207,9 +218,6 @@ static void RW_IN_MLookUp (void)
 
 void RW_IN_Init(in_state_t *in_state_p)
 {
-	int mtype;
-	int i;
-
 	in_state = in_state_p;
 
 	// mouse variables
@@ -542,6 +550,11 @@ static void HandleEvents(void)
 			win_x = event.xconfigure.x;
 			win_y = event.xconfigure.y;
 			break;
+		
+		case ClientMessage:
+			if (event.xclient.data.l[0] == wmDeleteWindow)
+				ri.Cmd_ExecuteText(EXEC_NOW, "quit");
+			break;
 		}
 	}
 	   
@@ -570,7 +583,6 @@ void KBD_Close(void)
 
 /*****************************************************************************/
 
-static qboolean GLimp_SwitchFullscreen( int width, int height );
 qboolean GLimp_InitGL (void);
 
 static void signal_handler(int sig)
@@ -612,6 +624,7 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 	XVisualInfo *visinfo;
 	XSetWindowAttributes attr;
 	XSizeHints *sizehints;
+	XWMHints *wmhints;
 	unsigned long mask;
 	int MajorVersion, MinorVersion;
 	int actualWidth, actualHeight;
@@ -738,11 +751,38 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 		sizehints->flags = PMinSize | PMaxSize | PBaseSize;
 	}
 	
+	wmhints = XAllocWMHints();
+	if (wmhints) {
+		#include "q2icon.xbm"
+
+		Pixmap icon_pixmap, icon_mask;
+		unsigned long fg, bg;
+		int i;
+		
+		fg = BlackPixel(dpy, visinfo->screen);
+		bg = WhitePixel(dpy, visinfo->screen);
+		icon_pixmap = XCreatePixmapFromBitmapData(dpy, win, (char *)q2icon_bits, q2icon_width, q2icon_height, fg, bg, visinfo->depth);
+		for (i = 0; i < sizeof(q2icon_bits); i++)
+			q2icon_bits[i] = ~q2icon_bits[i];
+		icon_mask = XCreatePixmapFromBitmapData(dpy, win, (char *)q2icon_bits, q2icon_width, q2icon_height, bg, fg, visinfo->depth); 
+	
+		wmhints->flags = IconPixmapHint|IconMaskHint;
+		wmhints->icon_pixmap = icon_pixmap;
+		wmhints->icon_mask = icon_mask;
+	}
+
 	XSetWMProperties(dpy, win, NULL, NULL, NULL, 0,
-			sizehints, None, None);
+			sizehints, wmhints, None);
 	if (sizehints)
 		XFree(sizehints);
-
+	if (wmhints)
+		XFree(wmhints);
+	
+	XStoreName(dpy, win, "Quake II");
+	
+	wmDeleteWindow = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+	XSetWMProtocols(dpy, win, &wmDeleteWindow, 1);
+	
 	XMapWindow(dpy, win);
 
 	if (vidmode_active) {
@@ -800,6 +840,14 @@ void GLimp_Shutdown( void )
 	dpy = NULL;
 	win = 0;
 	ctx = NULL;
+/*	
+	qglXChooseVisual             = NULL;
+	qglXCreateContext            = NULL;
+	qglXDestroyContext           = NULL;
+	qglXMakeCurrent              = NULL;
+	qglXCopyContext              = NULL;
+	qglXSwapBuffers              = NULL;
+*/	
 }
 
 /*
@@ -812,7 +860,20 @@ int GLimp_Init( void *hinstance, void *wndproc )
 {
 	InitSig();
 
-	return true;
+	if ( glw_state.OpenGLLib) {
+		#define GPA( a ) dlsym( glw_state.OpenGLLib, a )
+
+		qglXChooseVisual             =  GPA("glXChooseVisual");
+		qglXCreateContext            =  GPA("glXCreateContext");
+		qglXDestroyContext           =  GPA("glXDestroyContext");
+		qglXMakeCurrent              =  GPA("glXMakeCurrent");
+		qglXCopyContext              =  GPA("glXCopyContext");
+		qglXSwapBuffers              =  GPA("glXSwapBuffers");
+		
+		return true;
+	}
+	
+	return false;
 }
 
 /*
@@ -858,9 +919,3 @@ void Fake_glColorTableEXT( GLenum target, GLenum internalformat,
 	}
 	qgl3DfxSetPaletteEXT((GLuint *)temptable);
 }
-
-
-/*------------------------------------------------*/
-/* X11 Input Stuff
-/*------------------------------------------------*/
-

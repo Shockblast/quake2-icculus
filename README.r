@@ -11,12 +11,32 @@ access to other platforms.
 Be sure to install SDL 1.2 (http://www.libsdl.org) if you want to use the
 softsdl or sdlgl drivers, or the sdlquake2 binary.
 
-You can change what drivers you wish to build by editing the Makefile and
-changing the BUILD_ lines at the very top.
-
 'make' will, by default, build both the debug and release files.
 To build fully optimized binaries: make build_release
 The resulting binaries are then put in releasei386.
+
+
+Makefile options:
+-----------------
+(quake2 and gamei386.so are always built, but the following options can be
+ changed by editing the Makefile)
+BUILD_SDLQUAKE2		Build sdlquake2, a quake2 binary that uses SDL for
+                        CD audio and sound access (default = YES).
+BUILD_SVGA              Build ref_soft.so, a quake2 video driver that uses
+                        SVGAlib (default = NO).
+BUILD_X11               Build ref_softx.so, a quake2 video driver that uses
+                        X11 (default = YES).
+BUILD_GLX               Build ref_glx.so, a quake2 video driver that uses
+                        X11's GLX (default = YES).
+BUILD_FXGL              Build ref_gl.so [might be renamed to fxgl later], 
+                        a quake2 video driver that uses fxMesa (default =
+                        NO).  This option is currently untested because I do 
+                        not have a Voodoo 1 or 2.
+BUILD_SDL               Build ref_softsdl.so, a quake2 video driver that
+                        uses SDL (default = YES).
+BUILD_SDLGL             Build ref_sdlgl.so, a quake2 video driver that uses
+                        OpenGL with SDL (default = YES).
+BUILD_CTFDLL            Build the Threewave CTF gamei386.so (default = NO).
 
 
 To install the Quake2 gamedata:
@@ -59,11 +79,20 @@ line).
 Configuration files and such are saved in ~/.quake2/, so <installdir> can be
 made read-only or whatever.
 
-WARNING: Please do not make quake2 or any of the libraries suid root!
+WARNING: Please do not make quake2 or any of the libraries suid root!  Doing
+so is at your own risk.
 
-NOTE: Save games will most likely not work across different versions or
-builds (this is due to how savegames were stored).
+NOTE: Save games will not work across different versions or builds, because
+of the way they are stored.
 
+Dedicated Server:
+-----------------
+If there is a demand for it, I can add support for an explicit q2ded binary.
+Else, using +set dedicated 1 should be fine.
+
+Joystick Support:
+-----------------
+None yet.
 
 Commonly used commands:
 -----------------------
@@ -80,12 +109,29 @@ vid_restart             // restart video driver
 snd_restart             // restart sound driver
 basedir <dir>           // point quake2 to where the data is
 gl_driver <libGL.so>    // point quake2 to your libGL
+dedicated 1             // run quake2 as a dedicated server
+
+When using these commands on the quake2 command line, use +set to cause the
+variables be set before the config files are loaded (important for
+gl_driver). e.g.
+./quake2 +set vid_ref glx +set gl_driver /usr/lib/libGL.so.1
+
+If quake2 crashes when trying to load an OpenGL based driver (glx, sdlgl),
+make sure its not loading the wrong libGL.
+
+Is lighting slow in OpenGL (while firing, explosions, etc.)? Disable
+multitexturing (gl_ext_multitexture 0; vid_restart).
 
 
 Website:
 --------
-I'll post any updates I make at http://www.icculus.org/quake/ 
+I'll post any updates I make at http://www.icculus.org/quake2/ 
 (which currently redirects to http://www.icculus.org/~relnev/)
+
+Mailing List:
+-------------
+to subscribe: send a blank email to quake2-subscribe@icculus.org
+to post: send email to quake2@icculus.org
 
 Anonymous CVS access:
 ---------------------
@@ -93,14 +139,29 @@ cvs -d:pserver:anonymous@icculus.org:/cvs/cvsroot login
       (password is "anonymous" without the quotes.)
 cvs -z3 -d:pserver:anonymous@icculus.org:/cvs/cvsroot co quake2
 
-Questions:
-----------
-What's the best way of handling international keyboards with SDL?
+Bugzilla:
+---------
+https://bugzilla.icculus.org
 
 TODO:
 -----
+Try out RCG's key idea.
 Fix save games.
+Verify FXGL works.
+Joystick support.
+Fullscreen/DGA support in X11 driver.
+Fully switch to glext.h.
 Suggestions, anyone?
+
+v0.0.8: [01/04/02]
+-------
++ Fixed C-only ref_soft building.
++ SDL CD audio looping fix (Robert Bäuml)
++ ~/.quake2/<game> added to the search path for mods. (Ludwig Nussel)
++ Minor change to fix compilation with OpenGL 1.3 headers.
++ Fixed changing video drivers using the menu.
++ Fixed autoexec.cfg on startup.
++ Sparc Linux support (Vincent Cojot)
 
 v0.0.7: [12/28/01]
 -------
@@ -150,7 +211,10 @@ John Allensworth
 Stephen Anthony
 William Aoki
 Robert Bäuml
+Vincent Cojot
+Michel Dänzer
 Ryan C. Gordon
 Ludwig Nussel
+Peter van Paassen
 Zachary 'zakk' Slater
 Matti Valtonen

@@ -11,7 +11,7 @@
 # Here are your build options, no more will be added!
 # (Note: not all options are available for all platforms).
 # quake2 (uses OSS for sound, cdrom ioctls for cd audio) is automatically built.
-# gamei386.so is automatically built.
+# game{i386,axp,ppc}.so is automatically built.
 BUILD_SDLQUAKE2=YES	# sdlquake2 executable (uses SDL for cdrom and sound)
 BUILD_SVGA=NO		# SVGAlib driver. Seems to work fine.
 BUILD_X11=YES		# X11 software driver. Works somewhat ok.
@@ -30,12 +30,14 @@ $(error OS $(OSTYPE) is currently not supported)
 endif
 
 # this nice line comes from the linux kernel makefile
-ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/ -e s/alpha/axp/)
+ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc/ -e s/sparc64/sparc/ -e s/arm.*/arm/ -e s/sa110/arm/ -e s/alpha/axp/)
 
 ifneq ($(ARCH),i386)
 ifneq ($(ARCH),axp)
 ifneq ($(ARCH),ppc)
+ifneq ($(ARCH),sparc)
 $(error arch $(ARCH) is currently not supported)
+endif
 endif
 endif
 endif
@@ -48,6 +50,11 @@ RELEASE_CFLAGS=$(BASE_CFLAGS) -ffast-math -funroll-loops \
 endif
 
 ifeq ($(ARCH),ppc)
+RELEASE_CFLAGS=$(BASE_CFLAGS) -O2 -ffast-math -funroll-loops \
+	-fomit-frame-pointer -fexpensive-optimizations
+endif
+
+ifeq ($(ARCH),sparc)
 RELEASE_CFLAGS=$(BASE_CFLAGS) -ffast-math -funroll-loops \
 	-fomit-frame-pointer -fexpensive-optimizations
 endif
@@ -78,7 +85,10 @@ GAME_DIR=$(MOUNT_DIR)/game
 CTF_DIR=$(MOUNT_DIR)/ctf
 XATRIX_DIR=$(MOUNT_DIR)/xatrix
 
-BASE_CFLAGS=-Dstricmp=strcasecmp
+BASE_CFLAGS=-pipe -Dstricmp=strcasecmp
+ifneq ($(ARCH),i386)
+ BASE_CFLAGS+=-DC_ONLY
+endif
 
 DEBUG_CFLAGS=$(BASE_CFLAGS) -g
 
@@ -157,7 +167,7 @@ endif # ARCH axp
 
 ifeq ($(ARCH),ppc)
  ifeq ($(strip $(BUILD_SDLQUAKE2)),YES)
-  $(warning Warning: SDLQuake2 not supported for $(ARCH))
+  TARGETS += $(BUILDDIR)/sdlquake2
  endif
  
  ifeq ($(strip $(BUILD_SVGA)),YES)
@@ -165,7 +175,37 @@ ifeq ($(ARCH),ppc)
  endif
 
  ifeq ($(strip $(BUILD_X11)),YES)
-  $(warning Warning: X11 support not supported for $(ARCH))
+  TARGETS += $(BUILDDIR)/ref_softx.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_GLX)),YES)
+  TARGETS += $(BUILDDIR)/ref_glx.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_FXGL)),YES)
+  $(warning Warning: FXGL support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_SDL)),YES)
+  TARGETS += $(BUILDDIR)/ref_softsdl.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_SDLGL)),YES)
+  TARGETS += $(BUILDDIR)/ref_sdlgl.$(SHLIBEXT)
+ endif
+endif # ARCH ppc
+
+ifeq ($(ARCH),sparc)
+ ifeq ($(strip $(BUILD_SDLQUAKE2)),YES)
+  TARGETS += $(BUILDDIR)/sdlquake2
+ endif
+ 
+ ifeq ($(strip $(BUILD_SVGA)),YES)
+  $(warning Warning: SVGAlib support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_X11)),YES)
+  TARGETS += $(BUILDDIR)/ref_softx.$(SHLIBEXT)
  endif
 
  ifeq ($(strip $(BUILD_GLX)),YES)
@@ -177,13 +217,13 @@ ifeq ($(ARCH),ppc)
  endif
 
  ifeq ($(strip $(BUILD_SDL)),YES)
-  $(warning Warning: SDL support not supported for $(ARCH))
+  TARGETS += $(BUILDDIR)/ref_softsdl.$(SHLIBEXT)
  endif
 
  ifeq ($(strip $(BUILD_SDLGL)),YES)
-  TARGETS += $(BUILDDIR)/ref_sdlgl.$(SHLIBEXT)
+  $(warning Warning: SDLGL support not supported for $(ARCH))
  endif
-endif # ARCH ppc
+endif # ARCH sparc
 	
 ifeq ($(ARCH),i386)
  ifeq ($(strip $(BUILD_SDLQUAKE2)),YES)
@@ -299,11 +339,11 @@ QUAKE2_SDL_OBJS = \
 	$(BUILDDIR)/client/cd_sdl.o \
 	$(BUILDDIR)/client/snd_sdl.o
 
-ifeq ($(ARCH),axp)
-QUAKE2_AS_OBJS =  #blank
-else
+ifeq ($(ARCH),i386)
 QUAKE2_AS_OBJS = \
 	$(BUILDDIR)/client/snd_mixa.o
+else
+QUAKE2_AS_OBJS =  #blank
 endif
 
 $(BUILDDIR)/quake2 : $(QUAKE2_OBJS) $(QUAKE2_LNX_OBJS) $(QUAKE2_AS_OBJS)
@@ -1010,6 +1050,12 @@ REF_SOFT_OBJS = \
 	$(BUILDDIR)/ref_soft/r_sprite.o \
 	$(BUILDDIR)/ref_soft/r_surf.o \
 	\
+	$(BUILDDIR)/ref_soft/q_shared.o \
+	$(BUILDDIR)/ref_soft/q_shlinux.o \
+	$(BUILDDIR)/ref_soft/glob.o
+
+ifeq ($(ARCH),i386)
+REF_SOFT_OBJS += \
 	$(BUILDDIR)/ref_soft/r_aclipa.o \
 	$(BUILDDIR)/ref_soft/r_draw16.o \
 	$(BUILDDIR)/ref_soft/r_drawa.o \
@@ -1020,11 +1066,8 @@ REF_SOFT_OBJS = \
 	$(BUILDDIR)/ref_soft/math.o \
 	$(BUILDDIR)/ref_soft/d_polysa.o \
 	$(BUILDDIR)/ref_soft/r_varsa.o \
-	$(BUILDDIR)/ref_soft/sys_dosa.o \
-	\
-	$(BUILDDIR)/ref_soft/q_shared.o \
-	$(BUILDDIR)/ref_soft/q_shlinux.o \
-	$(BUILDDIR)/ref_soft/glob.o
+	$(BUILDDIR)/ref_soft/sys_dosa.o
+endif
 
 REF_SOFT_SVGA_OBJS = \
 	$(BUILDDIR)/ref_soft/rw_svgalib.o \
