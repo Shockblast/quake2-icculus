@@ -197,7 +197,7 @@ void SWimp_EndFrame (void)
 			vga_setpage(offset/0x10000);
 			memcpy(framebuffer_ptr,
 					vid.buffer + offset,
-					((total-offset>0x10000)?0x10000:(total-offset)));
+					(((total-offset)>0x10000)?0x10000:(total-offset)));
 		}
 	} 
 }

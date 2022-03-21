@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <SDL/SDL.h>
+#include "SDL.h"
 
 #ifdef OPENGL
 #include <GL/gl.h>
@@ -136,7 +136,14 @@ void RW_IN_Init(in_state_t *in_state_p)
 
 void RW_IN_Shutdown(void)
 {
-	mouse_avail = false;
+	if (mouse_avail) {
+		mouse_avail = false;
+
+		ri.Cmd_RemoveCommand ("+mlook");
+		ri.Cmd_RemoveCommand ("-mlook");
+
+		ri.Cmd_RemoveCommand ("force_centerview");
+	}	
 }
 
 /*
@@ -320,6 +327,8 @@ int XLateKey(unsigned int keysym)
 	return key;		
 }
 
+static unsigned char KeyStates[SDLK_LAST];
+
 void GetEvent(SDL_Event *event)
 {
 	unsigned int bstate;
@@ -346,6 +355,34 @@ void GetEvent(SDL_Event *event)
 	case SDL_MOUSEBUTTONUP:
 		break;
 	case SDL_KEYDOWN:
+		if ( (KeyStates[SDLK_LALT] || KeyStates[SDLK_RALT]) &&
+			(event->key.keysym.sym == SDLK_RETURN) ) {
+			/* SDL_WM_ToggleFullScreen(surface); */
+				
+			if (surface->flags & SDL_FULLSCREEN) {
+				ri.Cvar_SetValue( "vid_fullscreen", /*1*/ 0 );
+			} else {
+				ri.Cvar_SetValue( "vid_fullscreen", /*0*/ 1 );
+			}
+
+			break; /* ignore this key */
+		}
+		
+		if ( (KeyStates[SDLK_LCTRL] || KeyStates[SDLK_RCTRL]) &&
+			(event->key.keysym.sym == SDLK_g) ) {
+			SDL_GrabMode gm = SDL_WM_GrabInput(SDL_GRAB_QUERY);
+			/*	
+			SDL_WM_GrabInput((gm == SDL_GRAB_ON) ? SDL_GRAB_OFF : SDL_GRAB_ON);
+			gm = SDL_WM_GrabInput(SDL_GRAB_QUERY);
+			*/	
+			ri.Cvar_SetValue( "_windowed_mouse", (gm == SDL_GRAB_ON) ? /*1*/ 0 : /*0*/ 1 );
+			
+			
+			break; /* ignore this key */
+		}
+		
+		KeyStates[event->key.keysym.sym] = 1;
+		
 		key = XLateKey(event->key.keysym.sym);
 		if (key) {
 			keyq[keyq_head].key = key;
@@ -354,11 +391,15 @@ void GetEvent(SDL_Event *event)
 		}
 		break;
 	case SDL_KEYUP:
-		key = XLateKey(event->key.keysym.sym);
-		if (key) {
-			keyq[keyq_head].key = key;
-			keyq[keyq_head].down = false;
-			keyq_head = (keyq_head + 1) & 63;
+		if (KeyStates[event->key.keysym.sym]) {
+			KeyStates[event->key.keysym.sym] = 0;
+		
+			key = XLateKey(event->key.keysym.sym);
+			if (key) {
+				keyq[keyq_head].key = key;
+				keyq[keyq_head].down = false;
+				keyq_head = (keyq_head + 1) & 63;
+			}
 		}
 		break;
 	case SDL_QUIT:
@@ -378,9 +419,16 @@ void GetEvent(SDL_Event *event)
 */
 int SWimp_Init( void *hInstance, void *wndProc )
 {
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		Sys_Error("SDL Init failed: %s\n", SDL_GetError());
-		return false;
+	if (SDL_WasInit(SDL_INIT_AUDIO|SDL_INIT_CDROM|SDL_INIT_VIDEO) == 0) {
+		if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+			Sys_Error("SDL Init failed: %s\n", SDL_GetError());
+			return false;
+		}
+	} else if (SDL_WasInit(SDL_INIT_VIDEO) == 0) {
+		if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
+			Sys_Error("SDL Init failed: %s\n", SDL_GetError());
+			return false;
+		}
 	}
 
 //	SDL_EnableKeyRepeat(0, SDL_DEFAULT_REPEAT_INTERVAL);
@@ -456,7 +504,6 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 */
 	vinfo = SDL_GetVideoInfo();
 	sdl_palettemode = (vinfo->vfmt->BitsPerPixel == 8) ? (SDL_PHYSPAL|SDL_LOGPAL) : SDL_LOGPAL;
-	
 	flags = /*SDL_DOUBLEBUF|*/SDL_SWSURFACE|SDL_HWPALETTE;
 	if (fullscreen)
 		flags |= SDL_FULLSCREEN;
@@ -642,8 +689,15 @@ void SWimp_SetPalette( const unsigned char *palette )
 
 void SWimp_Shutdown( void )
 {
-	SDL_Quit();
+	if (surface)
+		SDL_FreeSurface(surface);
+	surface = NULL;
 	
+	if (SDL_WasInit(SDL_INIT_EVERYTHING) == SDL_INIT_VIDEO)
+		SDL_Quit();
+	else
+		SDL_QuitSubSystem(SDL_INIT_VIDEO);
+		
 	X11_active = false;
 }
 
@@ -657,13 +711,15 @@ void GLimp_Shutdown( void )
 /*
 ** SWimp_AppActivate
 */
+#ifndef OPENGL
 void SWimp_AppActivate( qboolean active )
 {
 }
-
+#else
 void GLimp_AppActivate( qboolean active )
 {
 }
+#endif
 
 //===============================================================================
 

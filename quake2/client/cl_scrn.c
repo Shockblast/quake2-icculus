@@ -571,7 +571,7 @@ void SCR_BeginLoadingPlaque (void)
 	if (cls.key_dest == key_console)
 		return;
 	if (cl.cinematictime > 0)
-		scr_draw_loading = 2;	// clear to balack first
+		scr_draw_loading = 2;	// clear to black first
 	else
 		scr_draw_loading = 1;
 	SCR_UpdateScreen ();

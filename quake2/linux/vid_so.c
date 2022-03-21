@@ -68,7 +68,7 @@ void VID_Printf (int print_level, char *fmt, ...)
 	static qboolean	inupdate;
 	
 	va_start (argptr,fmt);
-	vsprintf (msg,fmt,argptr);
+	vsnprintf (msg,MAXPRINTMSG,fmt,argptr);
 	va_end (argptr);
 
 	if (print_level == PRINT_ALL)
@@ -84,7 +84,7 @@ void VID_Error (int err_level, char *fmt, ...)
 	static qboolean	inupdate;
 	
 	va_start (argptr,fmt);
-	vsprintf (msg,fmt,argptr);
+	vsnprintf (msg,MAXPRINTMSG,fmt,argptr);
 	va_end (argptr);
 
 	Com_Error (err_level,"%s", msg);
@@ -185,6 +185,7 @@ qboolean VID_LoadRefresh( char *name )
 	refimport_t	ri;
 	GetRefAPI_t	GetRefAPI;
 	char	fn[MAX_OSPATH];
+	char *path;
 	struct stat st;
 	extern uid_t saved_euid;
 	FILE *fp;
@@ -206,6 +207,7 @@ qboolean VID_LoadRefresh( char *name )
 	//regain root
 	seteuid(saved_euid);
 
+#if 0
 	if ((fp = fopen(SO_FILE, "r")) == NULL) {
 		Com_Printf( "LoadLibrary(\"%s\") failed: can't open " SO_FILE " (required for location of ref libraries)\n", name);
 		return false;
@@ -217,15 +219,26 @@ qboolean VID_LoadRefresh( char *name )
 
 	strcat(fn, "/");
 	strcat(fn, name);
+#endif
+
+	path = Cvar_Get ("basedir", ".", CVAR_NOSET)->string;
+	if (path == NULL) {
+		Com_Printf( "LoadLibrary(\"%s\") failed: %s\n", name, "basedir not set?");
+		return false;
+	}
+		
+	snprintf (fn, MAX_OSPATH, "%s/%s", path, name );
+		
+	if (stat(fn, &st) == -1) {
+		Com_Printf( "LoadLibrary(\"%s\") failed: %s\n", name, strerror(errno));
+		return false;
+	}
 
 	// permission checking
 	if (strstr(fn, "softx") == NULL && 
+	    strstr(fn, "glx") == NULL &&
 	    strstr(fn, "softsdl") == NULL &&
-	    strstr(fn, "sdlgl") == NULL) { // softx doesn't require root
-		if (stat(fn, &st) == -1) {
-			Com_Printf( "LoadLibrary(\"%s\") failed: %s\n", name, strerror(errno));
-			return false;
-		}
+	    strstr(fn, "sdlgl") == NULL) { // softx doesn't require root	
 		if (st.st_uid != 0) {
 			Com_Printf( "LoadLibrary(\"%s\") failed: ref is not owned by root\n", name);
 			return false;
@@ -242,7 +255,7 @@ qboolean VID_LoadRefresh( char *name )
 		setegid(getgid());
 	}
 
-	if ( ( reflib_library = dlopen( fn, RTLD_NOW ) ) == 0 )
+	if ( ( reflib_library = dlopen( fn, RTLD_NOW ) ) == NULL )
 	{
 		Com_Printf( "LoadLibrary(\"%s\") failed: %s\n", name , dlerror());
 		return false;

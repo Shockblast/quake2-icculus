@@ -6,17 +6,67 @@
 # ELF only
 #
 
-ifneq (,$(findstring alpha,$(shell uname -m)))
-ARCH=axp
-else
-ARCH=i386
+# start of configurable options
+
+# Here are your build options, no more will be added!
+# (Note: not all options are available for all platforms).
+# quake2 (uses OSS for sound, cdrom ioctls for cd audio) is automatically built.
+# gamei386.so is automatically built.
+BUILD_SDLQUAKE2=YES	# sdlquake2 executable (uses SDL for cdrom and sound)
+BUILD_SVGA=NO		# SVGAlib driver. Seems to work ok.
+BUILD_X11=YES		# X11 software driver. Works somewhat ok.
+BUILD_GLX=YES		# X11 GLX driver. Works somewhat ok.
+BUILD_FXGL=NO		# FXMesa driver. No way to test (used only for V1 and V2).
+BUILD_SDL=YES		# SDL software driver. Works fine for some people.
+BUILD_SDLGL=YES		# SDL OpenGL driver. Works fine for some people.
+BUILD_CTFDLL=NO		# gamei386.so for ctf
+# i can add support for building xatrix and rogue libs if needed
+
+# Check OS type.
+OSTYPE := $(shell uname -s)
+
+ifneq ($(OSTYPE),Linux)
+$(error OS $(OSTYPE) is currently not supported)
 endif
 
+# this nice line comes from the linux kernel makefile
+ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/ -e s/alpha/axp/)
+
+ifneq ($(ARCH),i386)
+ifneq ($(ARCH),axp)
+ifneq ($(ARCH),ppc)
+$(error arch $(ARCH) is currently not supported)
+endif
+endif
+endif
+
+CC=gcc
+
+ifeq ($(ARCH),axp)
+RELEASE_CFLAGS=$(BASE_CFLAGS) -ffast-math -funroll-loops \
+	-fomit-frame-pointer -fexpensive-optimizations
+endif
+
+ifeq ($(ARCH),ppc)
+RELEASE_CFLAGS=$(BASE_CFLAGS) -ffast-math -funroll-loops \
+	-fomit-frame-pointer -fexpensive-optimizations
+endif
+
+ifeq ($(ARCH),i386)
+RELEASE_CFLAGS=$(BASE_CFLAGS) -O2 -ffast-math -funroll-loops -malign-loops=2 \
+	-malign-jumps=2 -malign-functions=2 -g
+# compiler bugs with gcc 2.96 and 3.0.1 can cause bad builds with heavy opts.
+#RELEASE_CFLAGS=$(BASE_CFLAGS) -O6 -m486 -ffast-math -funroll-loops \
+#	-fomit-frame-pointer -fexpensive-optimizations -malign-loops=2 \
+#	-malign-jumps=2 -malign-functions=2
+endif
+
+# (hopefully) end of configurable options
 MOUNT_DIR=.
 
 BUILD_DEBUG_DIR=debug$(ARCH)
 BUILD_RELEASE_DIR=release$(ARCH)
-CLIENT_DIR = $(MOUNT_DIR)/client
+CLIENT_DIR=$(MOUNT_DIR)/client
 SERVER_DIR=$(MOUNT_DIR)/server
 REF_SOFT_DIR=$(MOUNT_DIR)/ref_soft
 REF_GL_DIR=$(MOUNT_DIR)/ref_gl
@@ -26,41 +76,36 @@ GAME_DIR=$(MOUNT_DIR)/game
 CTF_DIR=$(MOUNT_DIR)/ctf
 XATRIX_DIR=$(MOUNT_DIR)/xatrix
 
-CC=gcc
 BASE_CFLAGS=-Dstricmp=strcasecmp
 
-ifeq ($(ARCH),axp)
-RELEASE_CFLAGS=$(BASE_CFLAGS) -ffast-math -funroll-loops \
-	-fomit-frame-pointer -fexpensive-optimizations
-else
-RELEASE_CFLAGS=$(BASE_CFLAGS) -O6 -ffast-math -funroll-loops \
-	-fexpensive-optimizations -malign-loops=2 \
-	-malign-jumps=2 -malign-functions=2
-# if your compiler can handle it
-# RELEASE_CFLAGS += -fomit-frame-pointer
-endif
-
 DEBUG_CFLAGS=$(BASE_CFLAGS) -g
+
 LDFLAGS=-lm -ldl
+
 SVGALDFLAGS=-lvga
-XLDFLAGS=-L/usr/X11R6/lib -lX11 -lXext 
+
 XCFLAGS=
+XLDFLAGS=-L/usr/X11R6/lib -lX11 -lXext 
 
-SDLCFLAGS=`sdl-config --cflags`
-SDLLDFLAGS=`sdl-config --libs`
+SDLCFLAGS=$(shell sdl-config --cflags)
+SDLLDFLAGS=$(shell sdl-config --libs)
 
-GLLDFLAGS=-L/usr/local/glide/lib -L/usr/X11/lib -L/usr/local/lib \
-	-L/usr/X11R6/lib -lGL -lX11 -lXext -lvga
-GLCFLAGS=
+FXGLCFLAGS=
+FXGLLDFLAGS=-L/usr/local/glide/lib -L/usr/X11/lib -L/usr/local/lib \
+	-L/usr/X11R6/lib -lX11 -lXext -lGL -lvga
 
-SDLGLLDFLAGS=-L/usr/X11R6/lib `sdl-config --libs` -lGL -lX11 -lXext
+GLXCFLAGS=
+GLXLDFLAGS=-L/usr/X11R6/lib -lX11 -lXext -lGL
+
+SDLGLCFLAGS=$(SDLCFLAGS) -DOPENGL
+#SDLGLLDFLAGS=-L/usr/X11R6/lib $(shell sdl-config --libs) -lX11 -lXext -lGL
+SDLGLLDFLAGS=$(shell sdl-config --libs) -lGL
 
 SHLIBEXT=so
 
 SHLIBCFLAGS=-fPIC
 SHLIBLDFLAGS=-shared
 
-CFLAGS = -g
 DO_CC=$(CC) $(CFLAGS) -o $@ -c $<
 DO_SHLIB_CC=$(CC) $(CFLAGS) $(SHLIBCFLAGS) -o $@ -c $<
 DO_GL_SHLIB_CC=$(CC) $(CFLAGS) $(SHLIBCFLAGS) $(GLCFLAGS) -o $@ -c $<
@@ -73,22 +118,101 @@ DO_SHLIB_AS=$(CC) $(CFLAGS) $(SHLIBCFLAGS) -DELF -x assembler-with-cpp -o $@ -c 
 
 .PHONY : targets build_debug build_release clean clean-debug clean-release clean2
 
-ifeq ($(ARCH),axp)
-TARGETS=$(BUILDDIR)/quake2 \
-	$(BUILDDIR)/game$(ARCH).$(SHLIBEXT) \
-	$(BUILDDIR)/ctf/game$(ARCH).$(SHLIBEXT) \
-#	$(BUILDDIR)/xatrix/game$(ARCH).$(SHLIBEXT)
-else
-TARGETS=$(BUILDDIR)/quake2 \
-	$(BUILDDIR)/game$(ARCH).$(SHLIBEXT) \
-	$(BUILDDIR)/ref_soft.$(SHLIBEXT) \
-	$(BUILDDIR)/ref_softx.$(SHLIBEXT) \
-	$(BUILDDIR)/ref_softsdl.$(SHLIBEXT) \
-	$(BUILDDIR)/ref_sdlgl.$(SHLIBEXT) \
-	$(BUILDDIR)/ctf/game$(ARCH).$(SHLIBEXT) \
-#	$(BUILDDIR)/ref_gl.$(SHLIBEXT) \
-#	$(BUILDDIR)/xatrix/game$(ARCH).$(SHLIBEXT)
+TARGETS=$(BUILDDIR)/quake2 $(BUILDDIR)/game$(ARCH).$(SHLIBEXT)
+
+ifeq ($(strip $(BUILD_CTFDLL)),YES)
+ TARGETS += $(BUILDDIR)/ctf/game$(ARCH).$(SHLIBEXT)
 endif
+
+ifeq ($(ARCH),axp)
+ ifeq ($(strip $(BUILD_SDLQUAKE2)),YES)
+  $(warning Warning: SDLQuake2 not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_SVGA)),YES)
+  $(warning Warning: SVGAlib support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_X11)),YES)
+  $(warning Warning: X11 support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_GLX)),YES)
+  $(warning Warning: support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_FXGL)),YES)
+  $(warning Warning: FXGL support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_SDL)),YES)
+  $(warning Warning: SDL support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_SDLGL)),YES)
+  $(warning Warning: SDLGL support not supported for $(ARCH))
+ endif
+endif # ARCH axp
+
+ifeq ($(ARCH),ppc)
+ ifeq ($(strip $(BUILD_SDLQUAKE2)),YES)
+  $(warning Warning: SDLQuake2 not supported for $(ARCH))
+ endif
+ 
+ ifeq ($(strip $(BUILD_SVGA)),YES)
+  $(warning Warning: SVGAlib support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_X11)),YES)
+  $(warning Warning: X11 support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_GLX)),YES)
+  $(warning Warning: GLX support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_FXGL)),YES)
+  $(warning Warning: FXGL support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_SDL)),YES)
+  $(warning Warning: SDL support not supported for $(ARCH))
+ endif
+
+ ifeq ($(strip $(BUILD_SDLGL)),YES)
+  TARGETS += $(BUILDDIR)/ref_sdlgl.$(SHLIBEXT)
+ endif
+endif # ARCH ppc
+	
+ifeq ($(ARCH),i386)
+ ifeq ($(strip $(BUILD_SDLQUAKE2)),YES)
+  TARGETS += $(BUILDDIR)/sdlquake2
+ endif
+
+ ifeq ($(strip $(BUILD_SVGA)),YES)
+  TARGETS += $(BUILDDIR)/ref_soft.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_X11)),YES)
+  TARGETS += $(BUILDDIR)/ref_softx.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_GLX)),YES)
+  TARGETS += $(BUILDDIR)/ref_glx.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_FXGL)),YES)
+  TARGETS += $(BUILDDIR)/ref_gl.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_SDL)),YES)
+  TARGETS += $(BUILDDIR)/ref_softsdl.$(SHLIBEXT)
+ endif
+
+ ifeq ($(strip $(BUILD_SDLGL)),YES)
+  TARGETS += $(BUILDDIR)/ref_sdlgl.$(SHLIBEXT)
+ endif
+endif # ARCH i386
 
 all: build_debug build_release
 
@@ -98,8 +222,7 @@ build_debug:
 		$(BUILD_DEBUG_DIR)/ref_soft \
 		$(BUILD_DEBUG_DIR)/ref_gl \
 		$(BUILD_DEBUG_DIR)/game \
-		$(BUILD_DEBUG_DIR)/ctf \
-		$(BUILD_DEBUG_DIR)/xatrix
+		$(BUILD_DEBUG_DIR)/ctf
 	$(MAKE) targets BUILDDIR=$(BUILD_DEBUG_DIR) CFLAGS="$(DEBUG_CFLAGS)"
 
 build_release:
@@ -108,8 +231,7 @@ build_release:
 		$(BUILD_RELEASE_DIR)/ref_soft \
 		$(BUILD_RELEASE_DIR)/ref_gl \
 		$(BUILD_RELEASE_DIR)/game \
-		$(BUILD_RELEASE_DIR)/ctf \
-		$(BUILD_RELEASE_DIR)/xatrix
+		$(BUILD_RELEASE_DIR)/ctf
 	$(MAKE) targets BUILDDIR=$(BUILD_RELEASE_DIR) CFLAGS="$(RELEASE_CFLAGS)"
 
 targets: $(TARGETS)
@@ -158,17 +280,23 @@ QUAKE2_OBJS = \
 	$(BUILDDIR)/client/sv_user.o \
 	$(BUILDDIR)/client/sv_world.o \
 	\
-	$(BUILDDIR)/client/cd_linux.o \
 	$(BUILDDIR)/client/q_shlinux.o \
 	$(BUILDDIR)/client/vid_menu.o \
 	$(BUILDDIR)/client/vid_so.o \
-	$(BUILDDIR)/client/snd_linux.o \
 	$(BUILDDIR)/client/sys_linux.o \
 	$(BUILDDIR)/client/glob.o \
 	$(BUILDDIR)/client/net_udp.o \
 	\
 	$(BUILDDIR)/client/q_shared.o \
 	$(BUILDDIR)/client/pmove.o
+
+QUAKE2_LNX_OBJS = \
+	$(BUILDDIR)/client/cd_linux.o \
+	$(BUILDDIR)/client/snd_linux.o
+
+QUAKE2_SDL_OBJS = \
+	$(BUILDDIR)/client/cd_sdl.o \
+	$(BUILDDIR)/client/snd_sdl.o
 
 ifeq ($(ARCH),axp)
 QUAKE2_AS_OBJS =  #blank
@@ -177,8 +305,11 @@ QUAKE2_AS_OBJS = \
 	$(BUILDDIR)/client/snd_mixa.o
 endif
 
-$(BUILDDIR)/quake2 : $(QUAKE2_OBJS) $(QUAKE2_AS_OBJS)
-	$(CC) $(CFLAGS) -o $@ $(QUAKE2_OBJS) $(QUAKE2_AS_OBJS) $(LDFLAGS)
+$(BUILDDIR)/quake2 : $(QUAKE2_OBJS) $(QUAKE2_LNX_OBJS) $(QUAKE2_AS_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(QUAKE2_OBJS) $(QUAKE2_LNX_OBJS) $(QUAKE2_AS_OBJS) $(LDFLAGS)
+
+$(BUILDDIR)/sdlquake2 : $(QUAKE2_OBJS) $(QUAKE2_SDL_OBJS) $(QUAKE2_AS_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(QUAKE2_OBJS) $(QUAKE2_SDL_OBJS) $(QUAKE2_AS_OBJS) $(LDFLAGS) $(SDLLDFLAGS)
 
 $(BUILDDIR)/client/cl_cin.o :     $(CLIENT_DIR)/cl_cin.c
 	$(DO_CC)
@@ -294,9 +425,6 @@ $(BUILDDIR)/client/sv_user.o :    $(SERVER_DIR)/sv_user.c
 $(BUILDDIR)/client/sv_world.o :   $(SERVER_DIR)/sv_world.c
 	$(DO_CC)
 
-$(BUILDDIR)/client/cd_linux.o :   $(LINUX_DIR)/cd_linux.c
-	$(DO_CC)
-
 $(BUILDDIR)/client/q_shlinux.o :  $(LINUX_DIR)/q_shlinux.c
 	$(DO_CC)
 
@@ -304,9 +432,6 @@ $(BUILDDIR)/client/vid_menu.o :   $(LINUX_DIR)/vid_menu.c
 	$(DO_CC)
 
 $(BUILDDIR)/client/vid_so.o :     $(LINUX_DIR)/vid_so.c
-	$(DO_CC)
-
-$(BUILDDIR)/client/snd_linux.o :  $(LINUX_DIR)/snd_linux.c
 	$(DO_CC)
 
 $(BUILDDIR)/client/snd_mixa.o :   $(LINUX_DIR)/snd_mixa.s
@@ -320,6 +445,18 @@ $(BUILDDIR)/client/glob.o :       $(LINUX_DIR)/glob.c
 
 $(BUILDDIR)/client/net_udp.o :    $(LINUX_DIR)/net_udp.c
 	$(DO_CC)
+
+$(BUILDDIR)/client/cd_linux.o :   $(LINUX_DIR)/cd_linux.c
+	$(DO_CC)
+
+$(BUILDDIR)/client/snd_linux.o :  $(LINUX_DIR)/snd_linux.c
+	$(DO_CC)
+
+$(BUILDDIR)/client/cd_sdl.o :     $(LINUX_DIR)/cd_sdl.c
+	$(DO_CC) $(SDLCFLAGS)
+
+$(BUILDDIR)/client/snd_sdl.o :     $(LINUX_DIR)/snd_sdl.c
+	$(DO_CC) $(SDLCFLAGS)
 
 #############################################################################
 # GAME
@@ -1004,11 +1141,11 @@ $(BUILDDIR)/ref_soft/q_shlinux.o :    $(LINUX_DIR)/q_shlinux.c
 $(BUILDDIR)/ref_soft/glob.o :         $(LINUX_DIR)/glob.c
 	$(DO_SHLIB_CC)
 
-$(BUILDDIR)/ref_soft/rw_svgalib.o :   $(LINUX_DIR)/rw_svgalib.c
-	$(DO_SHLIB_CC)
-
 $(BUILDDIR)/ref_soft/d_copy.o :       $(LINUX_DIR)/d_copy.s
 	$(DO_SHLIB_AS)
+
+$(BUILDDIR)/ref_soft/rw_svgalib.o :   $(LINUX_DIR)/rw_svgalib.c
+	$(DO_SHLIB_CC)
 
 $(BUILDDIR)/ref_soft/rw_in_svgalib.o : $(LINUX_DIR)/rw_in_svgalib.c
 	$(DO_SHLIB_CC)
@@ -1035,34 +1172,28 @@ REF_GL_OBJS = \
 	$(BUILDDIR)/ref_gl/gl_warp.o \
 	\
 	$(BUILDDIR)/ref_gl/qgl_linux.o \
-	$(BUILDDIR)/ref_gl/gl_fxmesa.o \
-	$(BUILDDIR)/ref_gl/rw_in_svgalib.o \
 	$(BUILDDIR)/ref_gl/q_shared.o \
 	$(BUILDDIR)/ref_gl/q_shlinux.o \
 	$(BUILDDIR)/ref_gl/glob.o
+
+REF_GLX_OBJS = \
+	$(BUILDDIR)/ref_gl/glx_imp.o
+
+REF_FXGL_OBJS = \
+	$(BUILDDIR)/ref_gl/rw_in_svgalib.o \
+	$(BUILDDIR)/ref_gl/gl_fxmesa.o
 
 REF_SDLGL_OBJS = \
-	$(BUILDDIR)/ref_gl/gl_draw.o \
-	$(BUILDDIR)/ref_gl/gl_image.o \
-	$(BUILDDIR)/ref_gl/gl_light.o \
-	$(BUILDDIR)/ref_gl/gl_mesh.o \
-	$(BUILDDIR)/ref_gl/gl_model.o \
-	$(BUILDDIR)/ref_gl/gl_rmain.o \
-	$(BUILDDIR)/ref_gl/gl_rmisc.o \
-	$(BUILDDIR)/ref_gl/gl_rsurf.o \
-	$(BUILDDIR)/ref_gl/gl_warp.o \
-	\
-	$(BUILDDIR)/ref_gl/qgl_linux.o \
-	$(BUILDDIR)/ref_gl/rw_sdl.o \
-	$(BUILDDIR)/ref_gl/q_shared.o \
-	$(BUILDDIR)/ref_gl/q_shlinux.o \
-	$(BUILDDIR)/ref_gl/glob.o
+	$(BUILDDIR)/ref_gl/rw_sdl.o
 
-$(BUILDDIR)/ref_gl.$(SHLIBEXT) : $(REF_GL_OBJS)
-	$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(REF_GL_OBJS) $(GLLDFLAGS)
+$(BUILDDIR)/ref_glx.$(SHLIBEXT) : $(REF_GL_OBJS) $(REF_GLX_OBJS)
+	$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(REF_GL_OBJS) $(REF_GLX_OBJS) $(GLXLDFLAGS)
 
-$(BUILDDIR)/ref_sdlgl.$(SHLIBEXT) : $(REF_SDLGL_OBJS)
-	$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(REF_SDLGL_OBJS) $(SDLGLLDFLAGS) 
+$(BUILDDIR)/ref_gl.$(SHLIBEXT) : $(REF_GL_OBJS) $(REF_FXGL_OBJS)
+	$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(REF_GL_OBJS) $(REF_FXGL_OBJS) $(FXGLLDFLAGS)
+
+$(BUILDDIR)/ref_sdlgl.$(SHLIBEXT) : $(REF_GL_OBJS) $(REF_SDLGL_OBJS)
+	$(CC) $(CFLAGS) $(SHLIBLDFLAGS) -o $@ $(REF_GL_OBJS) $(REF_SDLGL_OBJS) $(SDLGLLDFLAGS)
 
 $(BUILDDIR)/ref_gl/gl_draw.o :        $(REF_GL_DIR)/gl_draw.c
 	$(DO_GL_SHLIB_CC)
@@ -1094,15 +1225,6 @@ $(BUILDDIR)/ref_gl/gl_warp.o :        $(REF_GL_DIR)/gl_warp.c
 $(BUILDDIR)/ref_gl/qgl_linux.o :      $(LINUX_DIR)/qgl_linux.c
 	$(DO_GL_SHLIB_CC)
 
-$(BUILDDIR)/ref_gl/gl_fxmesa.o :      $(LINUX_DIR)/gl_fxmesa.c
-	$(DO_GL_SHLIB_CC)
-
-$(BUILDDIR)/ref_gl/rw_in_svgalib.o :  $(LINUX_DIR)/rw_in_svgalib.c
-	$(DO_GL_SHLIB_CC)
-
-$(BUILDDIR)/ref_gl/rw_sdl.o :         $(LINUX_DIR)/rw_sdl.c
-	$(DO_GL_SHLIB_CC) $(SDLCFLAGS) -DOPENGL
-
 $(BUILDDIR)/ref_gl/q_shared.o :       $(GAME_DIR)/q_shared.c
 	$(DO_GL_SHLIB_CC)
 
@@ -1111,6 +1233,18 @@ $(BUILDDIR)/ref_gl/q_shlinux.o :      $(LINUX_DIR)/q_shlinux.c
 
 $(BUILDDIR)/ref_gl/glob.o :           $(LINUX_DIR)/glob.c
 	$(DO_GL_SHLIB_CC)
+
+$(BUILDDIR)/ref_gl/glx_imp.o :        $(LINUX_DIR)/glx_imp.c
+	$(DO_GL_SHLIB_CC) $(GLXCFLAGS)
+
+$(BUILDDIR)/ref_gl/gl_fxmesa.o :      $(LINUX_DIR)/gl_fxmesa.c
+	$(DO_GL_SHLIB_CC) $(FXGLCFLAGS)
+
+$(BUILDDIR)/ref_gl/rw_in_svgalib.o :  $(LINUX_DIR)/rw_in_svgalib.c
+	$(DO_GL_SHLIB_CC)
+
+$(BUILDDIR)/ref_gl/rw_sdl.o :         $(LINUX_DIR)/rw_sdl.c
+	$(DO_GL_SHLIB_CC) $(SDLGLCFLAGS)
 
 #############################################################################
 # MISC
@@ -1125,7 +1259,7 @@ clean-release:
 	$(MAKE) clean2 BUILDDIR=$(BUILD_RELEASE_DIR) CFLAGS="$(DEBUG_CFLAGS)"
 
 clean2:
-	-rm -f \
+	rm -f \
 	$(QUAKE2_OBJS) \
 	$(QUAKE2_AS_OBJS) \
 	$(GAME_OBJS) \
@@ -1135,3 +1269,8 @@ clean2:
 	$(REF_SOFT_SVGA_OBJS) \
 	$(REF_SOFT_X11_OBJS) \
 	$(REF_GL_OBJS)
+
+distclean:
+	@-rm -rf $(BUILD_DEBUG_DIR) $(BUILD_RELEASE_DIR)
+	@-rm -f `find .. \( -not -type d \) -and \
+		\( -name '*~' \) -type f -print`

@@ -34,22 +34,19 @@ qboolean GLimp_InitGL (void);
 
 extern cvar_t *vid_fullscreen;
 extern cvar_t *vid_ref;
-#if 0
 static fxMesaContext fc = NULL;
-#endif
 #define NUM_RESOLUTIONS 3
 
-#if 0
 static resolutions[NUM_RESOLUTIONS][3]={ 
   { 512, 384, GR_RESOLUTION_512x384 },
   { 640, 400, GR_RESOLUTION_640x400 },
   { 640, 480, GR_RESOLUTION_640x480 }
 };
-#endif
+
 static int findres(int *width, int *height)
 {
 	int i;
-#if 0
+
 	for(i=0;i<NUM_RESOLUTIONS;i++)
 		if((*width<=resolutions[i][0]) && (*height<=resolutions[i][1])) {
 			*width = resolutions[i][0];
@@ -60,7 +57,6 @@ static int findres(int *width, int *height)
 	*width = 640;
 	*height = 480;
 	return GR_RESOLUTION_640x480;
-#endif	
 }
 
 static void signal_handler(int sig)
@@ -88,7 +84,6 @@ static void InitSig(void)
 */
 int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 {
-#if 0
 	int width, height;
 	GLint attribs[32];
 
@@ -129,8 +124,6 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 	fxMesaMakeCurrent(fc);
 
 	return rserr_ok;
-#endif
-	return rserr_invalid_mode;	
 }
 
 /*
@@ -144,12 +137,10 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 */
 void GLimp_Shutdown( void )
 {
-#if 0
 	if (fc) {
 		fxMesaDestroyContext(fc);
 		fc = NULL;
 	}
-#endif	
 }
 
 /*
@@ -181,10 +172,8 @@ void GLimp_BeginFrame( float camera_seperation )
 */
 void GLimp_EndFrame (void)
 {
-#if 0
 	glFlush();
 	fxMesaSwapBuffers();
-#endif	
 }
 
 /*
@@ -200,7 +189,6 @@ void Fake_glColorTableEXT( GLenum target, GLenum internalformat,
                              GLsizei width, GLenum format, GLenum type,
                              const GLvoid *table )
 {
-#if 0
 	byte temptable[256][4];
 	byte *intbl;
 	int i;
@@ -212,7 +200,4 @@ void Fake_glColorTableEXT( GLenum target, GLenum internalformat,
 		temptable[i][3] = 255;
 	}
 	gl3DfxSetPaletteEXT((GLuint *)temptable);
-#endif	
 }
-
-

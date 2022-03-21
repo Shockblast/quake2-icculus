@@ -74,7 +74,10 @@ int config_notify=0;
 int config_notify_width;
 int config_notify_height;
 						      
-typedef unsigned short PIXEL;
+typedef unsigned short PIXEL16;
+typedef unsigned int PIXEL32;
+
+static void SWimp_FreeResources( void );
 
 // Console variables that we need to access from this module
 
@@ -156,7 +159,13 @@ void RW_IN_Init(in_state_t *in_state_p)
 
 void RW_IN_Shutdown(void)
 {
-	mouse_avail = false;
+	if (mouse_avail) {
+		mouse_avail = false;
+		
+		ri.Cmd_RemoveCommand ("+mlook");
+		ri.Cmd_RemoveCommand ("-mlook");
+		ri.Cmd_RemoveCommand ("force_centerview");
+	}
 }
 
 /*
@@ -238,12 +247,14 @@ void RW_IN_Activate(void)
 
 /*****************************************************************************/
 
-static PIXEL st2d_8to16table[256];
+static PIXEL16 st2d_8to16table[256];
+static PIXEL32 st2d_8to32table[256];
+
 static int shiftmask_fl=0;
 static long r_shift,g_shift,b_shift;
 static unsigned long r_mask,g_mask,b_mask;
 
-void shiftmask_init()
+static void shiftmask_init()
 {
     unsigned int x;
     r_mask=x_vis->red_mask;
@@ -255,9 +266,9 @@ void shiftmask_init()
     shiftmask_fl=1;
 }
 
-PIXEL xlib_rgb(int r,int g,int b)
+static PIXEL32 xlib_rgb(int r,int g,int b)
 {
-    PIXEL p;
+    PIXEL32 p;
     if(shiftmask_fl==0) shiftmask_init();
     p=0;
 
@@ -282,26 +293,46 @@ PIXEL xlib_rgb(int r,int g,int b)
     return p;
 }
 
-void st2_fixup( XImage *framebuf, int x, int y, int width, int height)
+static void st2_fixup( XImage *framebuf, int x, int y, int width, int height)
 {
 	int xi,yi;
 	unsigned char *src;
-	PIXEL *dest;
 
 	if( (x<0)||(y<0) )return;
-
-	for (yi = y; yi < (y+height); yi++) {
-		src = &framebuf->data [yi * framebuf->bytes_per_line];
-		dest = (PIXEL*)src;
-		for(xi = (x+width-1); xi >= x; xi -= 8) {
-			dest[xi  ] = st2d_8to16table[src[xi  ]];
-			dest[xi-1] = st2d_8to16table[src[xi-1]];
-			dest[xi-2] = st2d_8to16table[src[xi-2]];
-			dest[xi-3] = st2d_8to16table[src[xi-3]];
-			dest[xi-4] = st2d_8to16table[src[xi-4]];
-			dest[xi-5] = st2d_8to16table[src[xi-5]];
-			dest[xi-6] = st2d_8to16table[src[xi-6]];
-			dest[xi-7] = st2d_8to16table[src[xi-7]];
+	
+	if (framebuf->bits_per_pixel == 32) {
+		for (yi = y; yi < (y+height); yi++) {
+			PIXEL32 *dest;
+			
+			src = &framebuf->data [yi * framebuf->bytes_per_line];
+			dest = (PIXEL32*)src;
+			for(xi = (x+width-1); xi >= x; xi -= 8) {
+				dest[xi  ] = st2d_8to32table[src[xi  ]];
+				dest[xi-1] = st2d_8to32table[src[xi-1]];
+				dest[xi-2] = st2d_8to32table[src[xi-2]];
+				dest[xi-3] = st2d_8to32table[src[xi-3]];
+				dest[xi-4] = st2d_8to32table[src[xi-4]];
+				dest[xi-5] = st2d_8to32table[src[xi-5]];
+				dest[xi-6] = st2d_8to32table[src[xi-6]];
+				dest[xi-7] = st2d_8to32table[src[xi-7]];
+			}
+		}
+	} else if (framebuf->bits_per_pixel == 15 || framebuf->bits_per_pixel == 16) {
+		for (yi = y; yi < (y+height); yi++) {
+			PIXEL16 *dest;
+			
+			src = &framebuf->data [yi * framebuf->bytes_per_line];
+			dest = (PIXEL16*)src;
+			for(xi = (x+width-1); xi >= x; xi -= 8) {
+				dest[xi  ] = st2d_8to16table[src[xi  ]];
+				dest[xi-1] = st2d_8to16table[src[xi-1]];
+				dest[xi-2] = st2d_8to16table[src[xi-2]];
+				dest[xi-3] = st2d_8to16table[src[xi-3]];
+				dest[xi-4] = st2d_8to16table[src[xi-4]];
+				dest[xi-5] = st2d_8to16table[src[xi-5]];
+				dest[xi-6] = st2d_8to16table[src[xi-6]];
+				dest[xi-7] = st2d_8to16table[src[xi-7]];
+			}
 		}
 	}
 }
@@ -661,7 +692,7 @@ void GetEvent(void)
 int SWimp_Init( void *hInstance, void *wndProc )
 {
 // open the display
-	x_disp = XOpenDisplay(0);
+	x_disp = XOpenDisplay(NULL);
 	if (!x_disp)
 	{
 		if (getenv("DISPLAY"))
@@ -704,7 +735,7 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 	srandom(getpid());
 
 	// free resources in use
-	SWimp_Shutdown ();
+	SWimp_FreeResources ();
 
 	// let the sound and input subsystems know about the new window
 	ri.Vid_NewWindow (vid.width, vid.height);
@@ -773,6 +804,7 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 	{
 	   int attribmask = CWEventMask  | CWColormap | CWBorderPixel;
 	   XSetWindowAttributes attribs;
+	   XSizeHints *sizehints;
 	   Colormap tmpcmap;
 	   
 	   tmpcmap = XCreateColormap(x_disp, XRootWindow(x_disp,
@@ -793,6 +825,24 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 			x_vis,
 			attribmask,
 			&attribs );
+			
+		sizehints = XAllocSizeHints();
+		if (sizehints) {
+			sizehints->min_width = vid.width;
+			sizehints->min_height = vid.height;
+			sizehints->max_width = vid.width;
+			sizehints->max_height = vid.height;
+			sizehints->base_width = vid.width;
+			sizehints->base_height = vid.height;
+			
+			sizehints->flags = PMinSize | PMaxSize | PBaseSize;
+		}
+		
+		XSetWMProperties(x_disp, x_win, NULL, NULL, NULL, 0,
+			sizehints, None, None);
+		if (sizehints)
+			XFree(sizehints);
+		
 		XStoreName(x_disp, x_win, "Quake II");
 
 		if (x_visinfo->class != TrueColor)
@@ -844,11 +894,16 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 		displayname = (char *) getenv("DISPLAY");
 		if (displayname)
 		{
-			char *d = displayname;
+			char *dptr = strdup(displayname);
+			char *d;
+			
+			d = dptr;
 			while (*d && (*d != ':')) d++;
 			if (*d) *d = 0;
 			if (!(!strcasecmp(displayname, "unix") || !*displayname))
 				doShm = false;
+				
+			free(dptr);
 		}
 	}
 
@@ -974,9 +1029,15 @@ void SWimp_SetPalette( const unsigned char *palette )
     if ( !palette )
         palette = ( const unsigned char * ) sw_state.currentpalette;
  
-	for(i=0;i<256;i++)
-		st2d_8to16table[i]= xlib_rgb(palette[i*4],
-			palette[i*4+1],palette[i*4+2]);
+ 	if (x_framebuffer[0]->bits_per_pixel == 32) {
+ 		for(i=0;i<256;i++)
+			st2d_8to32table[i]= (PIXEL32)xlib_rgb(palette[i*4],
+					palette[i*4+1],palette[i*4+2]);
+ 	} else if (x_framebuffer[0]->bits_per_pixel == 15 || x_framebuffer[0]->bits_per_pixel == 16) {
+		for(i=0;i<256;i++)
+			st2d_8to16table[i]= (PIXEL16)xlib_rgb(palette[i*4],
+					palette[i*4+1],palette[i*4+2]);
+	}
 
 	if (x_visinfo->class == PseudoColor && x_visinfo->depth == 8)
 	{
@@ -998,10 +1059,10 @@ void SWimp_SetPalette( const unsigned char *palette )
 ** System specific graphics subsystem shutdown routine.  Destroys
 ** DIBs or DDRAW surfaces as appropriate.
 */
-void SWimp_Shutdown( void )
+static void SWimp_FreeResources( void )
 {
 	int i;
-
+	
 	if (!X11_active)
 		return;
 
@@ -1014,16 +1075,23 @@ void SWimp_Shutdown( void )
 				x_framebuffer[i] = NULL;
 			}
 	} else if (x_framebuffer[0]) {
-		free(x_framebuffer[0]->data);
-		free(x_framebuffer[0]);
+		XDestroyImage(x_framebuffer[0]);
 		x_framebuffer[0] = NULL;
 	}
 
 	XDestroyWindow(	x_disp, x_win );
 
+	XSynchronize( x_disp, True );
+	
 	XAutoRepeatOn(x_disp);
-//	XCloseDisplay(x_disp);
+}
 
+void SWimp_Shutdown( void )
+{
+	SWimp_FreeResources();
+			
+	XCloseDisplay(x_disp);
+	
 	X11_active = false;
 }
 
@@ -1089,5 +1157,3 @@ void KBD_Update(void)
 void KBD_Close(void)
 {
 }
-
-

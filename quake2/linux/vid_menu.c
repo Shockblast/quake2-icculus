@@ -4,7 +4,11 @@
 #define REF_SOFT	0
 #define REF_SOFTX11	1
 #define REF_SOFTSDL	2
-#define REF_OPENGL	3
+#define REF_GLX		3
+#define REF_SDLGL	4
+#define REF_FXGL	5
+
+#define GL_REF_START	REF_GLX
 
 extern cvar_t *vid_ref;
 extern cvar_t *vid_fullscreen;
@@ -54,7 +58,7 @@ static void DriverCallback( void *unused )
 {
 	s_ref_list[!s_current_menu_index].curvalue = s_ref_list[s_current_menu_index].curvalue;
 
-	if ( s_ref_list[s_current_menu_index].curvalue < 3 )
+	if ( s_ref_list[s_current_menu_index].curvalue < GL_REF_START )
 	{
 		s_current_menu = &s_software_menu;
 		s_current_menu_index = 0;
@@ -134,8 +138,12 @@ static void ApplyChanges( void *unused )
 	case REF_SOFTSDL:
 		Cvar_Set( "vid_ref", "softsdl" );
 		break;
-	case REF_OPENGL:
-		Cvar_Set( "vid_ref", "sdlgl" ); /* was gl */
+	case REF_GLX:
+		Cvar_Set( "vid_ref", "glx" );
+		Cvar_Set( "gl_driver", "opengl32" );
+		break;
+	case REF_SDLGL:
+		Cvar_Set( "vid_ref", "sdlgl" );
 		Cvar_Set( "gl_driver", "opengl32" );
 		break;
 	}
@@ -194,6 +202,7 @@ void VID_MenuInit( void )
 		"[software      ]",
 		"[software X11  ]",
 		"[software SDL  ]",
+		"[OpenGL GLX    ]",
 		"[SDL OpenGL    ]",
 		0
 	};
@@ -220,7 +229,7 @@ void VID_MenuInit( void )
 		sw_stipplealpha = Cvar_Get( "sw_stipplealpha", "0", CVAR_ARCHIVE );
 
 	if ( !_windowed_mouse)
-        _windowed_mouse = Cvar_Get( "_windowed_mouse", "0", CVAR_ARCHIVE );
+		_windowed_mouse = Cvar_Get( "_windowed_mouse", "0", CVAR_ARCHIVE );
 
 	s_mode_list[SOFTWARE_MENU].curvalue = sw_mode->value;
 	s_mode_list[OPENGL_MENU].curvalue = gl_mode->value;
@@ -246,10 +255,25 @@ void VID_MenuInit( void )
 		s_current_menu_index = SOFTWARE_MENU;
 		s_ref_list[0].curvalue = s_ref_list[1].curvalue = REF_SOFTSDL;
 	}
-	else if ( strcmp( vid_ref->string, "sdlgl" ) == 0 ) /* was gl */
+	else if ( strcmp( vid_ref->string, "glx" ) == 0 )
 	{
 		s_current_menu_index = OPENGL_MENU;
-		s_ref_list[s_current_menu_index].curvalue = REF_OPENGL;
+		s_ref_list[s_current_menu_index].curvalue = REF_GLX;
+#if 0
+		if ( strcmp( gl_driver->string, "3dfxgl" ) == 0 )
+			s_ref_list[s_current_menu_index].curvalue = REF_3DFX;
+		else if ( strcmp( gl_driver->string, "pvrgl" ) == 0 )
+			s_ref_list[s_current_menu_index].curvalue = REF_POWERVR;
+		else if ( strcmp( gl_driver->string, "opengl32" ) == 0 )
+			s_ref_list[s_current_menu_index].curvalue = REF_OPENGL;
+		else
+			s_ref_list[s_current_menu_index].curvalue = REF_VERITE;
+#endif
+	}
+	else if ( strcmp( vid_ref->string, "sdlgl" ) == 0 )
+	{
+		s_current_menu_index = OPENGL_MENU;
+		s_ref_list[s_current_menu_index].curvalue = REF_SDLGL;
 #if 0
 		if ( strcmp( gl_driver->string, "3dfxgl" ) == 0 )
 			s_ref_list[s_current_menu_index].curvalue = REF_3DFX;

@@ -1249,17 +1249,23 @@ int R_Init( void *hinstance, void *hWnd )
 	** grab extensions
 	*/
 
-	if ( strstr( gl_config.extensions_string, "GL_EXT_compiled_vertex_array" ) || 
-		 strstr( gl_config.extensions_string, "GL_SGI_compiled_vertex_array" ) )
+	if ( strstr( gl_config.extensions_string, "GL_EXT_compiled_vertex_array" ) /* || 
+		 strstr( gl_config.extensions_string, "GL_SGI_compiled_vertex_array" ) */ )
 	{
-		ri.Con_Printf( PRINT_ALL, "...enabling GL_EXT_compiled_vertex_array\n" );
+		if ( gl_ext_compiled_vertex_array->value ) {
+			ri.Con_Printf( PRINT_ALL, "...enabling GL_EXT_compiled_vertex_array\n" );
 #ifdef _WIN32
-		qglLockArraysEXT = ( void * ) qwglGetProcAddress( "glLockArraysEXT" );
-		qglUnlockArraysEXT = ( void * ) qwglGetProcAddress( "glUnlockArraysEXT" );
+			qglLockArraysEXT = ( void * ) qwglGetProcAddress( "glLockArraysEXT" );
+			qglUnlockArraysEXT = ( void * ) qwglGetProcAddress( "glUnlockArraysEXT" );
 #else
-		qglLockArraysEXT = ( void * ) GLimp_GetProcAddress( "glLockArraysEXT" );
-		qglUnlockArraysEXT = ( void * ) GLimp_GetProcAddress( "glUnlockArraysEXT" );
-#endif		
+			qglLockArraysEXT = ( void * ) GLimp_GetProcAddress( "glLockArraysEXT" );
+			qglUnlockArraysEXT = ( void * ) GLimp_GetProcAddress( "glUnlockArraysEXT" );
+#endif
+		}
+		else
+		{	
+			ri.Con_Printf( PRINT_ALL, "...ignoring GL_EXT_compiled_vertex_array\n" );
+		}
 	}
 	else
 	{
@@ -1719,7 +1725,7 @@ void Sys_Error (char *error, ...)
 	char		text[1024];
 
 	va_start (argptr, error);
-	vsprintf (text, error, argptr);
+	vsnprintf (text, 1024, error, argptr);
 	va_end (argptr);
 
 	ri.Sys_Error (ERR_FATAL, "%s", text);
@@ -1731,7 +1737,7 @@ void Com_Printf (char *fmt, ...)
 	char		text[1024];
 
 	va_start (argptr, fmt);
-	vsprintf (text, fmt, argptr);
+	vsnprintf (text, 1024, fmt, argptr);
 	va_end (argptr);
 
 	ri.Con_Printf (PRINT_ALL, "%s", text);

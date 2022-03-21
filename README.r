@@ -1,28 +1,67 @@
-id Software Quake2 3.19+Changes by Steven Fuller <relnev@icculus.org>
+id Software's Quake2 3.19+Changes by Steven Fuller <relnev@icculus.org>, 
+                                     et al.
 
-Be sure to install SDL 1.2 (http://www.libsdl.org).
+
+For this to be of any use, you _must_ own a copy of Quake 2.  The demo would
+also work, but you might as well buy the full thing now.
 
 These modifications are intended for Linux users, as I do not have have
 access to other platforms.
 
-To build fully optimized binaries: cd quake2 && make build_release
-NOTE: gcc 2.96 is reported to not work with build_release (it dies on
-game/game/p_client.c).  Use build_debug instead.
+Be sure to install SDL 1.2 (http://www.libsdl.org) if you want to use the
+softsdl or sdlgl drivers, or the sdlquake2 binary.
 
-To install:
+You can change what drivers you wish to build by editing the Makefile and
+changing the BUILD_ lines at the very top.
+
+
+'make' will, by default, build both the debug and release files.
+To build fully optimized binaries: cd quake2 && make build_release
+The resulting binaries are then put in releasei386.
+
+
+To install the Quake2 data:
+(installdir is wherever you want to install quake2, and cdromdir is wherever
+you mount the Quake 2 CD-ROM)
+1. copy <cdromdir>/Install/Data/baseq2/pak0.pak to <installdir>/baseq2/
+2. copy <cdromdir>/Install/Data/baseq2/videos/ to <installdir>/baseq2/
+   (optional)
+3. Download q2-3.20-x86-full.exe from
+   ftp://ftp.idsoftware.com/idstuff/quake2/ or a mirror site, and extract the 
+   contents to a temporary directory (use unzip -L, as this is a standard zip
+   file).
+4. copy <q2-3.20-x86-full.exe temp directory>/baseq2/pak1.pak to
+   <installdir>/baseq2/
+5. copy <q2-3.20-x86-full.exe temp directory>/baseq2/pak2.pak to
+   <installdir>/baseq2/
+6. copy <q2-3.20-x86-full.exe temp directory>/baseq2/players/ to 
+   <installdir>/baseq2/
+
+To install this program:
 (builddir is either debugi386 or releasei386)
-copy <builddir>/gamei386.so to <installdir>/baseq3/
-copy <builddir>/ref_*.so to <path in /etc/quake2>
-copy <builddir>/quake2 to <installdir>/
+1. copy <builddir>/gamei386.so to <installdir>/baseq2/
+2. copy <builddir>/ref_*.so to <installdir>
+3. copy <builddir>/quake2 to <installdir>
+4. copy <builddir>/sdlquake2 to <installdir> (optional)
+
 
 To run:
 cd <installdir> && ./quake2
+Or:
+quake2 +set basedir <installdir>
 
-NOTE: Savegames will most likely not work across different versions or
+/etc/quake2.conf is no longer needed; instead, the ref_*.so files are loaded
+from basedir (basedir is "." by default, and can only be set at the command
+line).
+
+Configuration files and such are saved in ~/.quake2/, so <installdir> can be
+made read-only or whatever.
+
+WARNING: Please do not make quake2 or any of the libraries suid root!
+
+NOTE: Save games will most likely not work across different versions or
 builds (this is due to how savegames were stored).
 
-Be sure to edit /etc/quake2/ if needed (this file contains <installdir>,
-or where the ref_*.so were copied).
 
 Commonly used commands:
 cd_nocd 0               // disable CD audio
@@ -34,18 +73,30 @@ vid_ref <driver>        // select a video driver (softx is the original
                            X11-only, softsdl is SDL software, sdlgl is 
                            SDL OpenGL)
 vid_fullscreen 0        // disable fullscreen mode
-
+vid_restart             // restart video driver
+snd_restart             // restart sound driver
+basedir <dir>           // point quake2 to where the data is
 
 I'll post any updates I make at http://www.icculus.org/~relnev/
 
 Questions:
 ----------
-Should /etc/quake2.conf support be removed?
 What's the best way of handling international keyboards with SDL?
 
 TODO:
 -----
+Fix save games.
 Suggestions, anyone?
+
+v0.0.6: [12/27/01]
+-------
++ Made Makefile somewhat easier to configure.
++ X11 GLX driver now included.
++ Added "ctrl-g" (toggle mouse grab) and "alt-enter" (toggle fullscreen)
+  to SDL drivers.
++ SDL audio and cdrom support. (Robert Bäuml)
++ ~/.quake2/ support (Stephen Anthony, Ludwig Nussel)
++ LinuxPPC support (William Aoki)
 
 v0.0.5: [12/23/01]
 -------
@@ -78,4 +129,8 @@ v0.0.1: [12/22/01]
 Thanks:
 -------
 John Allensworth
+Stephen Anthony
+William Aoki
+Robert Bäuml
+Ludwig Nussel
 Matti Valtonen
