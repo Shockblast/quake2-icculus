@@ -13,10 +13,8 @@
 /cl_main.c/1.5/Sat Jun 15 17:51:52 2002//TR_016
 /cl_newfx.c/1.5/Sat Jul 12 01:59:51 2003//TR_016
 /cl_pred.c/1.1.1.1/Fri Dec 28 08:04:23 2001//TR_016
-/cl_scrn.c/1.6/Tue Jan 20 01:48:20 2004//TR_016
 /cl_tent.c/1.10/Tue Oct  8 20:03:00 2002//TR_016
 /cl_view.c/1.7/Tue Jan 20 01:48:20 2004//TR_016
-/client.h/1.5/Wed Jun 19 17:18:29 2002//TR_016
 /console.c/1.2/Sat Jun 15 13:51:43 2002//TR_016
 /console.h/1.1.1.1/Fri Dec 28 08:04:23 2001//TR_016
 /input.h/1.1.1.1/Fri Dec 28 08:04:23 2001//TR_016
@@ -36,4 +34,6 @@
 /vid.h/1.2/Thu Jan  3 05:10:13 2002//TR_016
 /x86.c/1.1.1.1/Fri Dec 28 08:04:23 2001//TR_016
 /cl_parse.c/1.3/Fri Sep 24 22:13:27 2004//TR_016
+/cl_scrn.c/1.7/Thu Jan 27 22:25:40 2005//TR_016
+/client.h/1.6/Thu Jan 27 22:25:40 2005//TR_016
 D
