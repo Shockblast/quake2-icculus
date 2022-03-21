@@ -36,8 +36,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <sys/time.h>
 #include <sys/types.h>
 #ifdef Joystick
-#include <sys/stat.h>
 #include <fcntl.h>
+//#include "joystick.h"
 #endif
 #include <unistd.h>
 #include <signal.h>
@@ -58,7 +58,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <X11/extensions/xf86vmode.h>
 #endif
 #ifdef Joystick
+# if defined (__linux__)
 #include <linux/joystick.h>
+# elif defined (__FreeBSD__)
+#include <sys/joystick.h>
+# endif
 #include <glob.h>
 #endif
 
@@ -68,6 +72,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #else
 #include "../ref_soft/r_local.h"
 #endif
+
 #include "../client/keys.h"
 #include "../linux/rw_linux.h"
 
@@ -104,19 +109,23 @@ static Colormap			x_cmap;
 static GC			x_gc;
 #endif
 
+#ifdef REDBLUE
+static GC				x_gc;
+#endif
+
 static Window			win;
 static Visual			*x_vis;
 static XVisualInfo		*x_visinfo;
 static int win_x, win_y;
 static Atom wmDeleteWindow;
 
+qboolean mouse_active;
+int mx, my, mouse_buttonstate;
+
 #define KEY_MASK (KeyPressMask | KeyReleaseMask)
 #define MOUSE_MASK (ButtonPressMask | ButtonReleaseMask | \
 		    PointerMotionMask | ButtonMotionMask )
 #define X_MASK (KEY_MASK | MOUSE_MASK | VisibilityChangeMask | StructureNotifyMask | ExposureMask )
-
-#define MOUSE_MAX 3000
-#define MOUSE_MIN 40
 
 static int				x_shmeventtype;
 //static XShmSegmentInfo	x_shminfo;
@@ -143,8 +152,13 @@ int config_notify_height;
 						      
 typedef unsigned short PIXEL16;
 typedef unsigned long PIXEL24;
+#ifdef REDBLUE
+static PIXEL16 st2d_8to16table_s[2][256];
+static PIXEL24 st2d_8to24table_s[2][256];
+#endif
 static PIXEL16 st2d_8to16table[256];
 static PIXEL24 st2d_8to24table[256];
+
 static int shiftmask_fl=0;
 static long r_shift,g_shift,b_shift;
 static unsigned long r_mask,g_mask,b_mask;
@@ -218,7 +232,7 @@ PIXEL24 xlib_rgb24(int r,int g,int b)
 
 void st2_fixup( XImage *framebuf, int x, int y, int width, int height)
 {
-	int yi;
+  int yi;
 	byte *src;
 	PIXEL16 *dest;
 	register int count, n;
@@ -251,6 +265,65 @@ void st2_fixup( XImage *framebuf, int x, int y, int width, int height)
 //		}
 	}
 }
+
+#ifdef REDBLUE
+void st2_fixup_stereo( XImage *framebuf1, XImage *framebuf2, 
+		       int x, int y, int width, int height)
+{
+  int yi;
+  unsigned char *src;
+  PIXEL16 *dest;
+  register int count, n;
+ 
+  if( (x<0)||(y<0) )return;
+  
+  for (yi = y; yi < (y+height); yi++) {
+    src = &framebuf1->data [yi * framebuf1->bytes_per_line];
+    
+    // Duff's Device
+    count = width;
+    n = (count + 7) / 8;
+    dest = ((PIXEL16 *)src) + x+width - 1;
+    src += x+width - 1;
+    
+    switch (count % 8) {
+    case 0:	do {	*dest-- = st2d_8to16table_s[0][*src--];
+    case 7:			*dest-- = st2d_8to16table_s[0][*src--];
+    case 6:			*dest-- = st2d_8to16table_s[0][*src--];
+    case 5:			*dest-- = st2d_8to16table_s[0][*src--];
+    case 4:			*dest-- = st2d_8to16table_s[0][*src--];
+    case 3:			*dest-- = st2d_8to16table_s[0][*src--];
+    case 2:			*dest-- = st2d_8to16table_s[0][*src--];
+    case 1:			*dest-- = st2d_8to16table_s[0][*src--];
+    } while (--n > 0);
+    }
+  }
+  
+  for (yi = y; yi < (y+height); yi++) {
+    src = &framebuf1->data [yi * framebuf1->bytes_per_line];
+    
+    // Duff's Device
+    count = width;
+    n = (count + 7) / 8;
+    dest = ((PIXEL16 *)src) + x+width - 1;
+    src = &framebuf2->data [yi * framebuf2->bytes_per_line];
+    src += x+width - 1;
+    
+    switch (count % 8) {
+    case 0:	do {	*dest-- += st2d_8to16table_s[1][*src--];
+    case 7:			*dest-- += st2d_8to16table_s[1][*src--];
+    case 6:			*dest-- += st2d_8to16table_s[1][*src--];
+    case 5:			*dest-- += st2d_8to16table_s[1][*src--];
+    case 4:			*dest-- += st2d_8to16table_s[1][*src--];
+    case 3:			*dest-- += st2d_8to16table_s[1][*src--];
+    case 2:			*dest-- += st2d_8to16table_s[1][*src--];
+    case 1:			*dest-- += st2d_8to16table_s[1][*src--];
+    } while (--n > 0);
+    }
+    
+  }
+}
+#endif
 
 void st3_fixup( XImage *framebuf, int x, int y, int width, int height)
 {
@@ -288,6 +361,64 @@ void st3_fixup( XImage *framebuf, int x, int y, int width, int height)
 	}
 }
 
+#ifdef REDBLUE
+void st3_fixup_stereo( XImage *framebuf1, XImage *framebuf2, 
+		       int x, int y, int width, int height)
+{
+  int yi;
+  unsigned char *src;
+  PIXEL24 *dest;
+  register int count, n;
+
+  
+  if( (x<0)||(y<0) )return;
+  
+  for (yi = y; yi < (y+height); yi++) {
+    src = &framebuf1->data [yi * framebuf1->bytes_per_line];
+    
+    // Duff's Device
+    count = width;
+    n = (count + 7) / 8;
+    dest = ((PIXEL24 *)src) + x+width - 1;
+    src += x+width - 1;
+    
+    switch (count % 8) {
+    case 0:	do {	*dest-- = st2d_8to24table_s[0][*src--];
+    case 7:			*dest-- = st2d_8to24table_s[0][*src--];
+    case 6:			*dest-- = st2d_8to24table_s[0][*src--];
+    case 5:			*dest-- = st2d_8to24table_s[0][*src--];
+    case 4:			*dest-- = st2d_8to24table_s[0][*src--];
+    case 3:			*dest-- = st2d_8to24table_s[0][*src--];
+    case 2:			*dest-- = st2d_8to24table_s[0][*src--];
+    case 1:			*dest-- = st2d_8to24table_s[0][*src--];
+    } while (--n > 0);
+    }
+  }
+  
+  for (yi = y; yi < (y+height); yi++) {
+    src = &framebuf1->data [yi * framebuf1->bytes_per_line];
+    
+    // Duff's Device
+    count = width;
+    n = (count + 7) / 8;
+    dest = ((PIXEL24 *)src) + x+width - 1;
+    src = &framebuf2->data [yi * framebuf2->bytes_per_line];
+    src += x+width - 1;
+    
+    switch (count % 8) {
+    case 0:	do {	*dest-- += st2d_8to24table_s[1][*src--];
+    case 7:			*dest-- += st2d_8to24table_s[1][*src--];
+    case 6:			*dest-- += st2d_8to24table_s[1][*src--];
+    case 5:			*dest-- += st2d_8to24table_s[1][*src--];
+    case 4:			*dest-- += st2d_8to24table_s[1][*src--];
+    case 3:			*dest-- += st2d_8to24table_s[1][*src--];
+    case 2:			*dest-- += st2d_8to24table_s[1][*src--];
+    case 1:			*dest-- += st2d_8to24table_s[1][*src--];
+    } while (--n > 0);
+    }
+  }
+}
+#endif
 
 
 // Console variables that we need to access from this module
@@ -298,70 +429,27 @@ void st3_fixup( XImage *framebuf, int x, int y, int width, int height)
 
 // this is inside the renderer shared lib, so these are called from vid_so
 
-static qboolean	mouse_avail;
-static int		mouse_buttonstate;
-static int		mouse_oldbuttonstate;
-static int		old_mouse_x, old_mouse_y;
-static int		mx, my;
-
-static qboolean mouse_active = false;
 static qboolean dgamouse = false;
 
-static cvar_t	*m_filter;
-static cvar_t	*in_mouse;
 static cvar_t	*in_dgamouse;
 
 static cvar_t	*vid_xpos;		     // X coordinate of window position
 static cvar_t	*vid_ypos;		     // Y coordinate of window position
 
 #ifdef Joystick
-static cvar_t   *in_joystick;
-static qboolean joystick_avail = false;
-static int joy_fd, jx, jy, jt;
-static cvar_t   *j_invert_y;
+static int joy_fd;
 #endif
-
-static qboolean	mlooking;
-
-// state struct passed in Init
-static in_state_t	*in_state;
-
-static cvar_t *sensitivity;
-static cvar_t *exponential_speedup;
-static cvar_t *lookstrafe;
-static cvar_t *m_side;
-static cvar_t *m_yaw;
-static cvar_t *m_pitch;
-static cvar_t *m_forward;
-static cvar_t *freelook;
 
 static Time myxtime;
 
-static void Force_CenterView_f (void)
-{
-	in_state->viewangles[PITCH] = 0;
-}
-
-static void RW_IN_MLookDown (void) 
-{ 
-	mlooking = true; 
-}
-
-static void RW_IN_MLookUp (void) 
-{
-	mlooking = false;
-	in_state->IN_CenterView_fp ();
-}
-
 #ifdef Joystick
-void InitJoystick() {
+qboolean OpenJoystick(cvar_t *joy_dev) {
   int i, err;
   glob_t pglob;
   struct js_event e;
 
-  joystick_avail = false;
-  err = glob("/dev/js*", 0, NULL, &pglob);
-  
+  err = glob(joy_dev->string, 0, NULL, &pglob);
+
   if (err) {
     switch (err) {
     case GLOB_NOSPACE:
@@ -373,7 +461,7 @@ void InitJoystick() {
     default:
       ri.Con_Printf(PRINT_ALL, "Error #%d while looking for joysticks\n",err);
     }
-    return;
+    return false;
   }  
   
   for (i=0;i<pglob.gl_pathc;i++) {
@@ -382,188 +470,23 @@ void InitJoystick() {
     if (joy_fd == -1) {
       ri.Con_Printf(PRINT_ALL, "Error opening joystick dev %s\n", 
 		    pglob.gl_pathv[i]);
+      return false;
     }
     else {
       while (read(joy_fd, &e, sizeof(struct js_event))!=-1 &&
 	     (e.type & JS_EVENT_INIT))
 	ri.Con_Printf(PRINT_ALL, "Read init event\n");
       ri.Con_Printf(PRINT_ALL, "Using joystick dev %s\n", pglob.gl_pathv[i]);
-      joystick_avail = true;
-      return;
+      return true;
     }
   }
   globfree(&pglob);
+  return false;
 }
 #endif
 
-void RW_IN_Init(in_state_t *in_state_p)
-{
-	in_state = in_state_p;
-
-	// mouse variables
-	m_filter = ri.Cvar_Get ("m_filter", "0", 0);
-	in_mouse = ri.Cvar_Get ("in_mouse", "0", CVAR_ARCHIVE);
-	in_dgamouse = ri.Cvar_Get ("in_dgamouse", "1", CVAR_ARCHIVE);
-#ifdef Joystick
-	in_joystick = ri.Cvar_Get ("in_joystick", "1", CVAR_ARCHIVE);
-	j_invert_y = ri.Cvar_Get ("j_invert_y", "1", CVAR_ARCHIVE);
-#endif
-	freelook = ri.Cvar_Get( "freelook", "0", 0 );
-	lookstrafe = ri.Cvar_Get ("lookstrafe", "0", 0);
-	sensitivity = ri.Cvar_Get ("sensitivity", "3", 0);
-	exponential_speedup = ri.Cvar_Get("exponential_speedup", "0", 
-					  CVAR_ARCHIVE);
-
-	m_pitch = ri.Cvar_Get ("m_pitch", "0.022", 0);
-	m_yaw = ri.Cvar_Get ("m_yaw", "0.022", 0);
-	m_forward = ri.Cvar_Get ("m_forward", "1", 0);
-	m_side = ri.Cvar_Get ("m_side", "0.8", 0);
-
-	ri.Cmd_AddCommand ("+mlook", RW_IN_MLookDown);
-	ri.Cmd_AddCommand ("-mlook", RW_IN_MLookUp);
-
-	ri.Cmd_AddCommand ("force_centerview", Force_CenterView_f);
-
-	mouse_avail = true;	
-
-#ifdef Joystick
-	if (in_joystick)
-	  InitJoystick();
-#endif
-}
-
-
-/*
-===========
-IN_Commands
-===========
-*/
-void RW_IN_Commands (void)
-{
-	int i;
-#ifdef Joystick
-	struct js_event e;
-	int key_index;
-#endif
-	if (mouse_avail) { 
-	  for (i=0 ; i<3 ; i++) {
-	    if ( (mouse_buttonstate & (1<<i)) && !(mouse_oldbuttonstate & (1<<i)) )
-	      in_state->Key_Event_fp (K_MOUSE1 + i, true);
-	    
-	    if ( !(mouse_buttonstate & (1<<i)) && (mouse_oldbuttonstate & (1<<i)) )
-	      in_state->Key_Event_fp (K_MOUSE1 + i, false);
-	  }
-	  mouse_oldbuttonstate = mouse_buttonstate;
-	}
-#ifdef Joystick
-	if (joystick_avail) {
-	  while (read(joy_fd, &e, sizeof(struct js_event))!=-1) {
-	    if (JS_EVENT_BUTTON & e.type) {
-	      key_index = (e.number < 4) ? K_JOY1 : K_AUX1;
-	      if (e.value) {
-		in_state->Key_Event_fp (key_index + e.number, true);
-	      }
-	      else {
-		in_state->Key_Event_fp (key_index + e.number, false);
-	      }
-	      //joy_oldbuttonstate = e.number;
-	    }
-	    else if (JS_EVENT_AXIS & e.type) {
-	      switch (e.number) {
-	      case 0:
-		jx = e.value;
-		break;
-	      case 1:
-		jy = e.value;
-		break;
-	      case 3:
-		jt = e.value;
-		break;
-	      }
-	    }
-	  }
-	}
-#endif
-}
-
-/*
-===========
-IN_Move
-===========
-*/
-void RW_IN_Move (usercmd_t *cmd)
-{
-  if (mouse_avail) {
-    if (m_filter->value)
-      {
-	mx = (mx + old_mouse_x) * 0.5;
-	my = (my + old_mouse_y) * 0.5;
-      }
-    
-    old_mouse_x = mx;
-    old_mouse_y = my;
-    
-    if (!exponential_speedup->value) {
-      mx *= sensitivity->value;
-      my *= sensitivity->value;
-    }
-    else {
-      if (mx > MOUSE_MIN || my > MOUSE_MIN || 
-	  mx < -MOUSE_MIN || my < -MOUSE_MIN) {
-	mx = (mx*mx*mx)/4;
-	my = (my*my*my)/4;
-	if (mx > MOUSE_MAX)
-	  mx = MOUSE_MAX;
-	else if (mx < -MOUSE_MAX)
-	  mx = -MOUSE_MAX;
-	if (my > MOUSE_MAX)
-	  my = MOUSE_MAX;
-	else if (my < -MOUSE_MAX)
-	  my = -MOUSE_MAX;
-      }
-    }
-    // add mouse X/Y movement to cmd
-    if ( (*in_state->in_strafe_state & 1) || 
-	 (lookstrafe->value && mlooking ))
-      cmd->sidemove += m_side->value * mx;
-    else
-      in_state->viewangles[YAW] -= m_yaw->value * mx;
-    
-    if ( (mlooking || freelook->value) && 
-	 !(*in_state->in_strafe_state & 1))
-      {
-	in_state->viewangles[PITCH] += m_pitch->value * my;
-      }
-    else
-      {
-	cmd->forwardmove -= m_forward->value * my;
-      }
-    mx = my = 0;
-  }    
-#ifdef Joystick
-  if (joystick_avail) {
-    // add joy X/Y movement to cmd
-    if ( (*in_state->in_strafe_state & 1) || 
-	 (lookstrafe->value && mlooking ))
-      cmd->sidemove += m_side->value * (jx/100);
-    else
-      in_state->viewangles[YAW] -= m_yaw->value * (jx/100);
-    
-    if ( (mlooking || freelook->value) && 
-	 !(*in_state->in_strafe_state & 1))
-      {
-	if (j_invert_y)
-	  in_state->viewangles[PITCH] -= m_pitch->value * (jy/100);
-	else
-	  in_state->viewangles[PITCH] += m_pitch->value * (jy/100);
-	cmd->forwardmove -= m_forward->value * (jt/100);
-      }
-    else
-      {
-	cmd->forwardmove -= m_forward->value * (jy/100);
-      }
-  }
-#endif
+void RW_IN_PlatformInit() {
+  in_dgamouse = ri.Cvar_Get ("in_dgamouse", "1", CVAR_ARCHIVE);
 }
 
 // ========================================================================
@@ -654,156 +577,174 @@ static void uninstall_grabs(void)
 
 static void IN_DeactivateMouse( void ) 
 {
-	if (!mouse_avail || !dpy || !win)
-		return;
+  //***BAD***
+  //if (!mouse_avail || !dpy || !win)
+  //return;
 
-	if (mouse_active) {
-		uninstall_grabs();
-		mouse_active = false;
-	}
+  if (mouse_active) {
+    uninstall_grabs();
+    mouse_active = false;
+  }
 }
 
 static void IN_ActivateMouse( void ) 
 {
-	if (!mouse_avail || !dpy || !win)
-		return;
-
-	if (!mouse_active) {
-		mx = my = 0; // don't spazz
-		install_grabs();
-		mouse_active = true;
-	}
+  //***BAD***
+  //if (!mouse_avail || !dpy || !win)
+  //return;
+  
+  if (!mouse_active) {
+    mx = my = 0; // don't spazz
+    install_grabs();
+    mouse_active = true;
+  }
 }
 
-void RW_IN_Frame (void)
-{
+void getMouse(int *x, int *y, int *state) {
+  *x = mx;
+  *y = my;
+  *state = mouse_buttonstate;
+}
+
+void doneMouse() {
+  mx = my = 0;
 }
 
 void RW_IN_Activate(qboolean active)
 {
-	if (active)
-		IN_ActivateMouse();
-	else
-		IN_DeactivateMouse();
+  if (active)
+    IN_ActivateMouse();
+  else
+    IN_DeactivateMouse();
 }
 
-void RW_IN_Shutdown(void)
-{
-	if (mouse_avail) {
-		RW_IN_Activate (false);
-		
-		mouse_avail = false;
-		
-		ri.Cmd_RemoveCommand ("+mlook");
-		ri.Cmd_RemoveCommand ("-mlook");
-		ri.Cmd_RemoveCommand ("force_centerview");
-	}
 #ifdef Joystick
-	if (joystick_avail)
-	  if (close(joy_fd))
-	    ri.Con_Printf(PRINT_ALL, "Error, Problem closing joystick.");
-#endif
-    
+qboolean CloseJoystick(void) {
+  if (close(joy_fd))
+    ri.Con_Printf(PRINT_ALL, "Error, Problem closing joystick.");
+  return true;
 }
+#endif
 
 /*****************************************************************************/
 
 char *RW_Sys_GetClipboardData()
 {
-	Window sowner;
-	Atom type, property;
-	unsigned long len, bytes_left, tmp;
-	unsigned char *data;
-	int format, result;
-	char *ret = NULL;
-			
-	sowner = XGetSelectionOwner(dpy, XA_PRIMARY);
-			
-	if (sowner != None) {
-		property = XInternAtom(dpy,
-				       "GETCLIPBOARDDATA_PROP",
-				       False);
-				
-		XConvertSelection(dpy,
-				  XA_PRIMARY, XA_STRING,
-				  property, win, myxtime); /* myxtime == time of last X event */
-		XFlush(dpy);
-
-		XGetWindowProperty(dpy,
-				   win, property,
-				   0, 0, False, AnyPropertyType,
-				   &type, &format, &len,
-				   &bytes_left, &data);
-		if (bytes_left > 0) {
-			result =
-			XGetWindowProperty(dpy,
-					   win, property,
-					   0, bytes_left, True, AnyPropertyType,
-					   &type, &format, &len,
-					   &tmp, &data);
-			if (result == Success) {
-				ret = strdup(data);
-			}
-			XFree(data);
-		}
-	}
-	return ret;
+  Window sowner;
+  Atom type, property;
+  unsigned long len, bytes_left, tmp;
+  unsigned char *data;
+  int format, result;
+  char *ret = NULL;
+  
+  sowner = XGetSelectionOwner(dpy, XA_PRIMARY);
+  
+  if (sowner != None) {
+    property = XInternAtom(dpy,
+			   "GETCLIPBOARDDATA_PROP",
+			   False);
+    
+    XConvertSelection(dpy,
+		      XA_PRIMARY, XA_STRING,
+		      property, win, myxtime); /* myxtime == time of last X event */
+    XFlush(dpy);
+    
+    XGetWindowProperty(dpy,
+		       win, property,
+		       0, 0, False, AnyPropertyType,
+		       &type, &format, &len,
+		       &bytes_left, &data);
+    if (bytes_left > 0) {
+      result =
+	XGetWindowProperty(dpy,
+			   win, property,
+			   0, bytes_left, True, AnyPropertyType,
+			   &type, &format, &len,
+			   &tmp, &data);
+      if (result == Success) {
+	ret = strdup(data);
+      }
+      XFree(data);
+    }
+  }
+  return ret;
 }
 
 /*****************************************************************************/
 #ifndef OPENGL
 void ResetFrameBuffer(void)
 {
-	int mem;
-	int pwidth;
-
-	if (x_framebuffer[0])
-	{
-		free(x_framebuffer[0]->data);
-		free(x_framebuffer[0]);
-	}
-
-// alloc an extra line in case we want to wrap, and allocate the z-buffer
-	pwidth = x_visinfo->depth / 8;
-	if (pwidth == 3) pwidth = 4;
-	mem = ((vid.width*pwidth+7)&~7) * vid.height;
-
-	x_framebuffer[0] = XCreateImage(dpy,
-		x_vis,
-		x_visinfo->depth,
-		ZPixmap,
-		0,
-		malloc(mem),
-		vid.width, vid.height,
-		32,
-		0);
-
-	if (!x_framebuffer[0])
-		Sys_Error("VID: XCreateImage failed\n");
-
-	vid.buffer = (byte*) (x_framebuffer[0]);
+  int mem;
+  int pwidth;
+  
+  if (x_framebuffer[0]) {
+    free(x_framebuffer[0]->data);
+    free(x_framebuffer[0]);
+  }
+  
+#ifdef REDBLUE
+  if (x_framebuffer[1]) {
+    free(x_framebuffer[1]->data);
+    free(x_framebuffer[1]);
+  }
+#endif
+  
+  // alloc an extra line in case we want to wrap, and allocate the z-buffer
+  pwidth = x_visinfo->depth / 8;
+  if (pwidth == 3) pwidth = 4;
+  mem = ((vid.width*pwidth+7)&~7) * vid.height;
+  
+  x_framebuffer[0] = XCreateImage(dpy,
+				  x_vis,
+				  x_visinfo->depth,
+				  ZPixmap,
+				  0,
+				  malloc(mem),
+				  vid.width, vid.height,
+				  32,
+				  0);
+  
+  if (!x_framebuffer[0])
+    Sys_Error("VID: XCreateImage failed\n");
+  
+#ifdef REDBLUE
+  x_framebuffer[1] = XCreateImage(dpy,
+				  x_vis,
+				  x_visinfo->depth,
+				  ZPixmap,
+				  0,
+				  malloc(mem),
+				  vid.width, vid.height,
+				  32,
+				  0);
+  
+  if (!x_framebuffer[1])
+    Sys_Error("VID: XCreateImage failed\n");
+#endif
+  
+  vid.buffer = (byte*) (x_framebuffer[0]->data);
 }
 #endif
 
 void ResetSharedFrameBuffers(void)
 {
-	int size;
-	int key;
-	int minsize = getpagesize();
-	int frm;
-
-	for (frm=0 ; frm<2 ; frm++)
+  int size;
+  int key;
+  int minsize = getpagesize();
+  int frm;
+  
+  for (frm=0 ; frm<2 ; frm++)
+    {
+      // free up old frame buffer memory
+      if (x_framebuffer[frm])
 	{
-	// free up old frame buffer memory
-		if (x_framebuffer[frm])
-		{
-			XShmDetach(dpy, &x_shminfo[frm]);
-			free(x_framebuffer[frm]);
-			shmdt(x_shminfo[frm].shmaddr);
-		}
-
-	// create the image
-		x_framebuffer[frm] = XShmCreateImage(	dpy,
+	  XShmDetach(dpy, &x_shminfo[frm]);
+	  free(x_framebuffer[frm]);
+	  shmdt(x_shminfo[frm].shmaddr);
+	}
+      
+      // create the image
+      x_framebuffer[frm] = XShmCreateImage(	dpy,
 						x_vis,
 						x_visinfo->depth,
 						ZPixmap,
@@ -1012,127 +953,127 @@ int X11_KeyRepeat(Display *display, XEvent *event)
 
 void HandleEvents(void)
 {
-	XEvent event;
-	int b;
-	qboolean dowarp = false;
-	int mwx = vid.width/2;
-	int mwy = vid.height/2;
-   
-	while (XPending(dpy)) {
-
-	  XNextEvent(dpy, &event);
-	  
-	  switch(event.type) {
-	  case KeyPress:
-	    myxtime = event.xkey.time;
-	    if (in_state && in_state->Key_Event_fp)
-	      in_state->Key_Event_fp (XLateKey(&event.xkey), true);
-	    break;
-	  case KeyRelease:
-	    if (! X11_KeyRepeat(dpy, &event)) {
-	      if (in_state && in_state->Key_Event_fp)
-		in_state->Key_Event_fp (XLateKey(&event.xkey), false);
-	    }
-	    break;
+  XEvent event;
+  int b;
+  qboolean dowarp = false;
+  int mwx = vid.width/2;
+  int mwy = vid.height/2;
+  
+  in_state_t *in_state = getState();
+  
+  while (XPending(dpy)) {
+    XNextEvent(dpy, &event);
+    
+    switch(event.type) {
+    case KeyPress:
+      myxtime = event.xkey.time;
+      if (in_state && in_state->Key_Event_fp)
+	in_state->Key_Event_fp (XLateKey(&event.xkey), true);
+      break;
+    case KeyRelease:
+      if (! X11_KeyRepeat(dpy, &event)) {
+	if (in_state && in_state->Key_Event_fp)
+	  in_state->Key_Event_fp (XLateKey(&event.xkey), false);
+      }
+      break;
+      
+    case MotionNotify:
+      if (ignorefirst) {
+	ignorefirst = false;
+	break;
+      }
+      if (mouse_active) {
+	if (dgamouse) {
+	  mx += (event.xmotion.x + win_x)*2;
+	  my += (event.xmotion.y + win_y)*2;
+	} 
+	else 
+	  {
+	    mx += ((int)event.xmotion.x - mwx)*2;
+	    my += ((int)event.xmotion.y - mwy)*2;
+	    mwx = event.xmotion.x;
+	    mwy = event.xmotion.y;
 	    
-	  case MotionNotify:
-	    if (ignorefirst) {
-	      ignorefirst = false;
-	      break;
-	    }
-	    
-	    if (mouse_active) {
-	      if (dgamouse) {
-		mx += (event.xmotion.x + win_x) * 2;
-		my += (event.xmotion.y + win_y) * 2;
-	      } 
-	      else 
-		{
-		  mx += ((int)event.xmotion.x - mwx) * 2;
-		  my += ((int)event.xmotion.y - mwy) * 2;
-		  mwx = event.xmotion.x;
-		  mwy = event.xmotion.y;
-		  
-		  if (mx || my)
-		    dowarp = true;
-		}
-	    }
-	    break;
-	    
-	  case ButtonPress:
-	    myxtime = event.xbutton.time;
-	    
-	    b=-1;
-	    if (event.xbutton.button == 1)
-	      b = 0;
-	    else if (event.xbutton.button == 2)
-	      b = 2;
-	    else if (event.xbutton.button == 3)
-	      b = 1;
-	    else if (event.xbutton.button == 4)
-	      in_state->Key_Event_fp (K_MWHEELUP, 1);
-	    else if (event.xbutton.button == 5)
-	      in_state->Key_Event_fp (K_MWHEELDOWN, 1);
-	    if (b>=0)
-	      mouse_buttonstate |= 1<<b;
-	    break;
-	    
-	  case ButtonRelease:
-	    b=-1;
-	    if (event.xbutton.button == 1)
-	      b = 0;
-	    else if (event.xbutton.button == 2)
-	      b = 2;
-	    else if (event.xbutton.button == 3)
-	      b = 1;
-	    else if (event.xbutton.button == 4)
-	      in_state->Key_Event_fp (K_MWHEELUP, 0);
-	    else if (event.xbutton.button == 5)
-	      in_state->Key_Event_fp (K_MWHEELDOWN, 0);
-	    if (b>=0)
-	      mouse_buttonstate &= ~(1<<b);
-	    break;
-	    
-	  case CreateNotify :
-	    ri.Cvar_Set( "vid_xpos", va("%d", event.xcreatewindow.x));
-	    ri.Cvar_Set( "vid_ypos", va("%d", event.xcreatewindow.y));
-	    vid_xpos->modified = false;
-	    vid_ypos->modified = false;
-	    win_x = event.xcreatewindow.x;
-	    win_y = event.xcreatewindow.y;
-	    break;
-	    
-	  case ConfigureNotify :
-	    ri.Cvar_Set( "vid_xpos", va("%d", event.xcreatewindow.x));
-	    ri.Cvar_Set( "vid_ypos", va("%d", event.xcreatewindow.y));
-	    vid_xpos->modified = false;
-	    vid_ypos->modified = false;
-	    win_x = event.xconfigure.x;
-	    win_y = event.xconfigure.y;
-	    config_notify_width = event.xconfigure.width;
-	    config_notify_height = event.xconfigure.height;
-	    if (config_notify_width != vid.width ||
-		config_notify_height != vid.height)
-	      XMoveResizeWindow(dpy, win, win_x, win_y, vid.width, vid.height);
-	    config_notify = 1;
-	    break;
-	    
-	  case ClientMessage:
-	    if (event.xclient.data.l[0] == wmDeleteWindow)
-	      ri.Cmd_ExecuteText(EXEC_NOW, "quit");
-	    break;
-	  default:
-	    if (doShm && event.type == x_shmeventtype)
-	      oktodraw = true;
-	    if (event.type == Expose && !event.xexpose.count)
-	      exposureflag = true;
+	    if (mx || my)
+	      dowarp = true;
 	  }
-	}
-	
-	if (dowarp) {
-	  /* move the mouse to the window center again */
-	  XWarpPointer(dpy,None,win,0,0,0,0, vid.width/2,vid.height/2);
-	}
+      }
+      break;
+      
+    case ButtonPress:
+      myxtime = event.xbutton.time;
+      
+      b=-1;
+      if (event.xbutton.button == 1)
+	b = 0;
+      else if (event.xbutton.button == 2)
+	b = 2;
+      else if (event.xbutton.button == 3)
+	b = 1;
+      else if (event.xbutton.button == 4)
+	in_state->Key_Event_fp (K_MWHEELUP, 1);
+      else if (event.xbutton.button == 5)
+	in_state->Key_Event_fp (K_MWHEELDOWN, 1);
+      if (b>=0)
+	mouse_buttonstate |= 1<<b;
+      break;
+      
+    case ButtonRelease:
+      b=-1;
+      if (event.xbutton.button == 1)
+	b = 0;
+      else if (event.xbutton.button == 2)
+	b = 2;
+      else if (event.xbutton.button == 3)
+	b = 1;
+      else if (event.xbutton.button == 4)
+	in_state->Key_Event_fp (K_MWHEELUP, 0);
+      else if (event.xbutton.button == 5)
+	in_state->Key_Event_fp (K_MWHEELDOWN, 0);
+      if (b>=0)
+	mouse_buttonstate &= ~(1<<b);
+      break;
+      
+    case CreateNotify :
+      ri.Cvar_Set( "vid_xpos", va("%d", event.xcreatewindow.x));
+      ri.Cvar_Set( "vid_ypos", va("%d", event.xcreatewindow.y));
+      vid_xpos->modified = false;
+      vid_ypos->modified = false;
+      win_x = event.xcreatewindow.x;
+      win_y = event.xcreatewindow.y;
+      break;
+      
+    case ConfigureNotify :
+      ri.Cvar_Set( "vid_xpos", va("%d", event.xcreatewindow.x));
+      ri.Cvar_Set( "vid_ypos", va("%d", event.xcreatewindow.y));
+      vid_xpos->modified = false;
+      vid_ypos->modified = false;
+      win_x = event.xconfigure.x;
+      win_y = event.xconfigure.y;
+      config_notify_width = event.xconfigure.width;
+      config_notify_height = event.xconfigure.height;
+      if (config_notify_width != vid.width ||
+	  config_notify_height != vid.height)
+	XMoveResizeWindow(dpy, win, win_x, win_y, vid.width, vid.height);
+      config_notify = 1;
+      break;
+      
+    case ClientMessage:
+      if (event.xclient.data.l[0] == wmDeleteWindow)
+	ri.Cmd_ExecuteText(EXEC_NOW, "quit");
+      break;
+    default:
+      if (doShm && event.type == x_shmeventtype)
+	oktodraw = true;
+      if (event.type == Expose && !event.xexpose.count)
+	exposureflag = true;
+    }
+  }
+  
+  if (dowarp) {
+    /* move the mouse to the window center again */
+    XWarpPointer(dpy,None,win,0,0,0,0, vid.width/2,vid.height/2);
+  }
 }
 
 /*****************************************************************************/
@@ -1147,31 +1088,31 @@ void HandleEvents(void)
 int SWimp_Init( void *hInstance, void *wndProc )
 {
 
-	vid_xpos = ri.Cvar_Get ("vid_xpos", "3", CVAR_ARCHIVE);
-	vid_ypos = ri.Cvar_Get ("vid_ypos", "22", CVAR_ARCHIVE);
-
-// open the display
-	dpy = XOpenDisplay(NULL);
-	if (!dpy)
-	{
-		if (getenv("DISPLAY"))
-			Sys_Error("VID: Could not open display [%s]\n",
-				getenv("DISPLAY"));
-		else
-			Sys_Error("VID: Could not open local display\n");
-	}
-
-// catch signals so i can turn on auto-repeat
-
-	{
-		struct sigaction sa;
-		sigaction(SIGINT, 0, &sa);
-		sa.sa_handler = TragicDeath;
-		sigaction(SIGINT, &sa, 0);
-		sigaction(SIGTERM, &sa, 0);
-	}
-
-	return true;
+  vid_xpos = ri.Cvar_Get ("vid_xpos", "3", CVAR_ARCHIVE);
+  vid_ypos = ri.Cvar_Get ("vid_ypos", "22", CVAR_ARCHIVE);
+  
+  // open the display
+  dpy = XOpenDisplay(NULL);
+  if (!dpy)
+    {
+      if (getenv("DISPLAY"))
+	Sys_Error("VID: Could not open display [%s]\n",
+		  getenv("DISPLAY"));
+      else
+	Sys_Error("VID: Could not open local display\n");
+    }
+  
+  // catch signals so i can turn on auto-repeat
+  
+  {
+    struct sigaction sa;
+    sigaction(SIGINT, 0, &sa);
+    sa.sa_handler = TragicDeath;
+    sigaction(SIGINT, &sa, 0);
+    sigaction(SIGTERM, &sa, 0);
+  }
+  
+  return true;
 }
 #endif
 
@@ -1352,15 +1293,20 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 
 // wait for first exposure event
 	{
-		exposureflag = false;
-		do
-		{
-			HandleEvents();
-		} while (!exposureflag);
+	  exposureflag = false;
+	  do
+	    {
+	      HandleEvents();
+	    } while (!exposureflag);
 	}
-// now safe to draw
-
+	// now safe to draw
+#ifdef REDBLUE
+	doShm = false;
+#endif
 // even if MITSHM is available, make sure it's a local connection
+#ifdef REDBLUE
+	/*
+#endif
 	if (XShmQueryExtension(dpy))
 	{
 		char *displayname;
@@ -1380,7 +1326,9 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 			free(dptr);
 		}
 	}
-
+#ifdef REDBLUE
+	*/
+#endif
 	if (doShm)
 	{
 		x_shmeventtype = XShmGetEventBase(dpy) + ShmCompletion;
@@ -1434,10 +1382,10 @@ void SWimp_EndFrame (void)
 
 	if (doShm)
 	{
-		if (x_visinfo->depth == 16)
-			st2_fixup( x_framebuffer[current_framebuffer], 0, 0, vid.width, vid.height);
-		else if (x_visinfo->depth == 24)
-			st3_fixup( x_framebuffer[current_framebuffer], 0, 0, vid.width, vid.height);
+	  if (x_visinfo->depth == 16)
+	    st2_fixup( x_framebuffer[current_framebuffer], 0, 0, vid.width, vid.height);
+	  else if (x_visinfo->depth == 24)
+	    st3_fixup( x_framebuffer[current_framebuffer], 0, 0, vid.width, vid.height);
 		if (!XShmPutImage(dpy, win, x_gc,
 			x_framebuffer[current_framebuffer], 0, 0, 0, 0, vid.width, vid.height, True))
 			Sys_Error("VID_Update: XShmPutImage failed\n");
@@ -1450,12 +1398,25 @@ void SWimp_EndFrame (void)
 	}
 	else
 	{
-		if (x_visinfo->depth == 16)
-			st2_fixup( x_framebuffer[current_framebuffer], 0, 0, vid.width, vid.height);
-		else if (x_visinfo->depth == 24)
-			st3_fixup( x_framebuffer[current_framebuffer], 0, 0, vid.width, vid.height);
-		XPutImage(dpy, win, x_gc, x_framebuffer[0], 0, 0, 0, 0, vid.width, vid.height);
-		XSync(dpy, False);
+
+#ifdef REDBLUE
+	  if (x_visinfo->depth == 16)
+	    st2_fixup_stereo( x_framebuffer[0], x_framebuffer[1], 
+			      0, 0, vid.width, vid.height);
+	  else if (x_visinfo->depth == 24)
+	    st3_fixup_stereo( x_framebuffer[0], x_framebuffer[1], 
+			      0, 0, vid.width, vid.height);
+#else	
+	  if (x_visinfo->depth == 16)
+	    st2_fixup( x_framebuffer[current_framebuffer], 
+		       0, 0, vid.width, vid.height);
+	  else if (x_visinfo->depth == 24)
+	    st3_fixup( x_framebuffer[current_framebuffer], 
+		       0, 0, vid.width, vid.height);
+#endif
+	  XPutImage(dpy, win, x_gc, x_framebuffer[0], 0, 
+		    0, 0, 0, vid.width, vid.height);
+	  XSync(dpy, False);
 	}
 }
 #endif
@@ -1509,8 +1470,17 @@ void SWimp_SetPalette( const unsigned char *palette )
 		palette = ( const unsigned char * ) sw_state.currentpalette;
  
 	for(i=0;i<256;i++) {
-		st2d_8to16table[i]= xlib_rgb16(palette[i*4], palette[i*4+1],palette[i*4+2]);
-		st2d_8to24table[i]= xlib_rgb24(palette[i*4], palette[i*4+1],palette[i*4+2]);
+#ifdef REDBLUE
+	  int tmp = (30*palette[i*4] + 59*palette[i*4+1] + 11*palette[i*4+2]) / 100;
+	  st2d_8to16table_s[0][i]= xlib_rgb16(tmp,0,0);
+	  st2d_8to24table_s[0][i]= xlib_rgb24(tmp,0,0);
+	  st2d_8to16table_s[1][i]= xlib_rgb16(0,0,tmp);
+	  st2d_8to24table_s[1][i]= xlib_rgb24(0,0,tmp);
+#endif
+	  st2d_8to16table[i]= xlib_rgb16(palette[i*4], 
+					 palette[i*4+1],palette[i*4+2]);
+	  st2d_8to24table[i]= xlib_rgb24(palette[i*4], 
+					 palette[i*4+1],palette[i*4+2]);
 	}
 
 	if (x_visinfo->class == PseudoColor && x_visinfo->depth == 8)
@@ -1550,10 +1520,17 @@ void SWimp_Shutdown( void )
 				shmdt(x_shminfo[i].shmaddr);
 				x_framebuffer[i] = NULL;
 			}
-	} else if (x_framebuffer[0]) {
-		free(x_framebuffer[0]->data);
-		free(x_framebuffer[0]);
-		x_framebuffer[0] = NULL;
+	} else {
+	  if (x_framebuffer[0]) {
+	    free(x_framebuffer[0]->data);
+	    free(x_framebuffer[0]);
+	    x_framebuffer[0] = NULL;
+	  }
+	  if (x_framebuffer[1]) {
+	    free(x_framebuffer[1]->data);
+	    free(x_framebuffer[1]);
+	    x_framebuffer[1] = NULL;
+	  }
 	}
 
 	XDestroyWindow(	dpy, win );
@@ -1574,6 +1551,16 @@ void SWimp_Shutdown( void )
 void SWimp_AppActivate( qboolean active )
 {
 }
+
+#ifdef REDBLUE
+void SetStereoBuffer(int buf)
+{
+  if (x_framebuffer[buf])
+    vid.buffer = (byte*) (x_framebuffer[buf]->data);
+  else
+    printf("SetStereoBuffer: x_framebuffer[%d] is NULL\n", buf);
+}
+#endif
 #endif
 //===============================================================================
 
@@ -1609,13 +1596,13 @@ Key_Event_fp_t Key_Event_fp;
 
 void KBD_Init(Key_Event_fp_t fp)
 {
-	Key_Event_fp = fp;
+  Key_Event_fp = fp;
 }
 
 void KBD_Update(void)
 {
-// get events from x server
-	HandleEvents();
+  // get events from x server
+  HandleEvents();
 }
 
 void KBD_Close(void)
@@ -1977,5 +1964,28 @@ void GLimp_Shutdown( void )
 	qglXCopyContext              = NULL;
 	qglXSwapBuffers              = NULL;
 */	
+}
+#endif
+
+#ifdef Joystick
+void PlatformJoyCommands(int *axis_vals, int *axis_map) {
+  struct js_event e;
+  int key_index;
+  in_state_t *in_state = getState();
+  
+  while (read(joy_fd, &e, sizeof(struct js_event))!=-1) {
+    if (JS_EVENT_BUTTON & e.type) {
+      key_index = (e.number < 4) ? K_JOY1 : K_AUX1;
+      if (e.value) {
+	in_state->Key_Event_fp (key_index + e.number, true);
+      }
+      else {
+	in_state->Key_Event_fp (key_index + e.number, false);
+      }
+    }
+    else if (JS_EVENT_AXIS & e.type) {
+      axis_vals[axis_map[e.number]] = e.value;
+    }
+  }
 }
 #endif

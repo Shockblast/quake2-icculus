@@ -1090,13 +1090,18 @@ void R_InitGraphics( int width, int height )
 	R_GammaCorrectAndSetPalette( ( const unsigned char *) d_8to24table );
 }
 
+#ifdef REDBLUE
+void SetStereoBuffer(int buf);
+#endif
 /*
 ** R_BeginFrame
 */
 void R_BeginFrame( float camera_separation )
 {
 	extern void Draw_BuildGammaTable( void );
-
+#ifdef REDBLUE
+	SetStereoBuffer((camera_separation <= 0.0) ? 0 : 1);
+#endif
 	/*
 	** rebuild the gamma correction palette if necessary
 	*/
@@ -1371,6 +1376,13 @@ refexport_t GetRefAPI (refimport_t rimp)
 	re.RenderFrame = R_RenderFrame;
 
 	re.DrawGetPicSize = Draw_GetPicSize;
+
+
+#ifdef QMAX
+	re.DrawScaledPic = Draw_ScaledPic;
+	re.AddStain = R_AddStain;
+#endif
+
 	re.DrawPic = Draw_Pic;
 	re.DrawStretchPic = Draw_StretchPic;
 	re.DrawChar = Draw_Char;
@@ -1420,4 +1432,12 @@ void Com_Printf (char *fmt, ...)
 	ri.Con_Printf (PRINT_ALL, "%s", text);
 }
 
+#endif
+
+#ifdef QMAX
+void	R_AddStain (vec3_t org, float intensity, float r, float g, float b) {
+}
+
+void	Draw_ScaledPic (int x, int y, float scale, float alpha, char *pic) {
+}
 #endif

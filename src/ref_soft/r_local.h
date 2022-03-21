@@ -1,3 +1,5 @@
+#ifndef __R_LOCAL__
+#define __R_LOCAL__
 /*
 Copyright (C) 1997-2001 Id Software, Inc.
 
@@ -803,6 +805,11 @@ void    R_FreeUnusedImages (void);
 
 void	R_GammaCorrectAndSetPalette( const unsigned char *pal );
 
+#ifdef QMAX
+void	R_AddStain (vec3_t org, float intensity, float r, float g, float b);
+void	Draw_ScaledPic (int x, int y, float scale, float alpha, char *pic);
+#endif
+
 extern mtexinfo_t  *sky_texinfo[6];
 
 void R_InitSkyBox (void);
@@ -847,3 +854,4 @@ void		SWimp_Shutdown( void );
 rserr_t		SWimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen );
 void		SWimp_AppActivate( qboolean active );
 
+#endif

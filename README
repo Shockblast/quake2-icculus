@@ -1,5 +1,5 @@
         Minor OS-oriented changes to id Software's Quake2 3.21: 
-                        "It works for me and a few others, v0.15"
+                        "Sorry, real life (tm) got in the way,0.16"
 
 ***************************************************************************
 Important Note:  If you received an installer which installed the Quake II
@@ -61,9 +61,12 @@ BUILD_JOYSTICK		Build quake2 with support for SDL and Linux joysticks,
 			[default = YES].
 BUILD_ARTS		Build support for the aRts sound system 
 			(src/linux/snd_arts.c) [default = NO]
+BUILD_ALSA		Build support for the ALSA sound system [default = NO]
 BUILD_DEDICATED		Build the quake 2 dedicated server q2ded.
 BUILD_QMAX		Build the eye-candy oriented Quame2 Max (see below)
 BUILD_AA		Build the aalib text mode renderer.
+BUILD_RETEXTURE		Build support for retextured textures, see:
+http://http://3d.kicks-ass.net/texturepaks/
 
 To install the Quake2 demo data:
 --------------------------------
@@ -166,6 +169,16 @@ The AALib video driver is written by jfedor@jfedor.org it provides text
 rendering for Quake2.  It requires the aalib package to build, which is
 available at http://aa-project.sourceforge.net.
 
+Retexturing Support
+------------------
+There has been an effort to retexture Quake2 with 24-bit textures to replace
+8-bit ones.  The resulting textures look *good* but take up more space and
+makes quake2 run slower.  
+
+If you wish to run retextured quake2 you need to download pak1x (currently 0-6) from  http://3d.kicks-ass.net/texturepaks/
+
+Thanks to Karen Pouelle for the code to support this.
+
 To run:
 -------
 cd <installdir> && ./quake2
@@ -242,17 +255,21 @@ quake2 +set dedicated 1 +set ip <IPv4 address>
 
 Joystick Support:
 -----------------
+***Important note**** 
+5/12/04
+The joystick code has been modified to be more in line
+with the joystick functionality detailed in src/docs/joystick.txt
+*********************
+
 Joystick should function on all compatible SDL platforms using the sdlquake2
 binary as well as on linux using the linux kernel joystick API.  If you want
 to build with joystick support (the default) set BUILD_JOYSTICK to YES in
 the Makefile.  
-Joystick obeys the same free-look/strafe rules as mouse.  You can set these in
-the options menu.
-There are four command line settings for joystick:
-j_invert_y [1],0 if set to zero pulling back on the joystick points down
-j_lr_axis [0] set the axis which controls left right movement
-j_ud_axis [1] set the axis which controls up down (in free-look) or forward back (freelock off)
-j_throttle [3] set the axis which controls the players forward backward throttle (if free-look is true)
+
+Have a look at src/docs/joystick.txt for the details
+
+There is a single linux specific option: 
+	* joy_dev : this sets the device name of the joystick to use (/dev/js*)
 
 
 Windows Support:
@@ -303,13 +320,6 @@ More information can be found in src/docs/.
 
 Known Bugs and Workarounds:
 ---------------------------
-Bug: Shooting the Tank Commander in the boss2 easter egg can cause Quake 2
-     to lock up (reported by Gary Briggs).
-Workaround: Don't do that, I guess.  The problem is with game/g_weapon.c,
-     line 674 (fire_rail).  Something goes wrong(?) with the raytrace and
-     tr.endpos ends up changing very little, if at all, so the game gets stuck
-     in the loop.
-
 FAQ:
 ----
 Q: Quake2 crashes when starting a new game.
@@ -371,13 +381,30 @@ Florent Parent
 Victor Shkamerda
 Zachary 'zakk' Slater
 Matti Valtonen
-Russell Mellinger
+Rusty Mellinger
+Karen Pouelle
+Toni Spets
+Nicolas Regnault
+Nick Warne
+
+v 0.16 [09/13/04]
+Load more pakfiles [Toni Spets]
+Load bigger PCX images [Toni Spets]
+Railgun easter egg bug fixed [Nick Warne]
+Preliminary x86_64 support [Nicolas Regnault]
+Red/Blue 3D support <http://www.jfedor.org>
+Retexturing support (thanks to Karen Pouelle)
+Better FreeBSD support (thanks to /danfe)
+Added ALSA sound support
+Advanced Joystick Support
+Some miscelaneous fixes which I've forgotten about
+
 
 v 0.15 [10/08/02]
 Solaris updates from Vincent
 TiBook and Vaio video modes
 Stencil Shadows in non-quake2-max
-Spark o' death bug fixed (thanks to Russell Mellinger!)
+Spark o' death bug fixed (thanks to Rusty Mellinger!)
 Crosshair scale support for q2-max
 
 v 0.14 [9/5/02]

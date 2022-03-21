@@ -77,6 +77,7 @@ static int keyq_tail=0;
 static int window_width;
 static int window_height;
 
+extern char display_name[];
 
 /*****************************************************************************/
 /* MOUSE                                                                     */
@@ -774,10 +775,10 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
   window_width = width;
   window_height = height;
 
-  // destroy the existing window
+  // destroy the existing window (Commented out on Mon Sep 20 15:09:02 MEST 2004)
   GLimp_Shutdown ();
 
-  if (!(dpy = XOpenDisplay(NULL))) {
+  if (!(dpy = XOpenDisplay(display_name))) {
     fprintf(stderr, "Error couldn't open the X display\n");
     return rserr_invalid_mode;
   }
@@ -798,16 +799,16 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
     }
   }
 
-#if 0
 	/* do some pantsness */
+	if ( qglXGetConfig )
 	{
 		int red_bits, blue_bits, green_bits, depth_bits, alpha_bits;
 
-		glXGetConfig(dpy, visinfo, GLX_RED_SIZE, &red_bits);
-		glXGetConfig(dpy, visinfo, GLX_BLUE_SIZE, &blue_bits);
-		glXGetConfig(dpy, visinfo, GLX_GREEN_SIZE, &green_bits);
-		glXGetConfig(dpy, visinfo, GLX_DEPTH_SIZE, &depth_bits);
-		glXGetConfig(dpy, visinfo, GLX_ALPHA_SIZE, &alpha_bits);
+		qglXGetConfig(dpy, visinfo, GLX_RED_SIZE, &red_bits);
+		qglXGetConfig(dpy, visinfo, GLX_BLUE_SIZE, &blue_bits);
+		qglXGetConfig(dpy, visinfo, GLX_GREEN_SIZE, &green_bits);
+		qglXGetConfig(dpy, visinfo, GLX_DEPTH_SIZE, &depth_bits);
+		qglXGetConfig(dpy, visinfo, GLX_ALPHA_SIZE, &alpha_bits);
 
 		ri.Con_Printf(PRINT_ALL, "I: got %d bits of red\n", red_bits);
 		ri.Con_Printf(PRINT_ALL, "I: got %d bits of blue\n", blue_bits);
@@ -815,13 +816,13 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 		ri.Con_Printf(PRINT_ALL, "I: got %d bits of depth\n", depth_bits);
 		ri.Con_Printf(PRINT_ALL, "I: got %d bits of alpha\n", alpha_bits);
 	}
-#endif
 
 	/* stencilbuffer shadows */
+	if ( qglXGetConfig )
 	{
 		int stencil_bits;
 
-		if (!glXGetConfig(dpy, visinfo, GLX_STENCIL_SIZE, &stencil_bits)) {
+		if (!qglXGetConfig(dpy, visinfo, GLX_STENCIL_SIZE, &stencil_bits)) {
 			ri.Con_Printf(PRINT_ALL, "I: got %d bits of stencil\n", stencil_bits);
 			if (stencil_bits >= 1) {
 				have_stencil = true;
@@ -878,17 +879,31 @@ int GLimp_SetMode( int *pwidth, int *pheight, int mode, qboolean fullscreen )
 */
 void GLimp_Shutdown( void )
 {
-  if (dpy) {
-    if (ctx)
-      qglXDestroyContext(dpy, ctx);
-    if (win)
-      XDestroyWindow(dpy, win);
-    XCloseDisplay(dpy);
-  }
-  ctx = NULL;
-  dpy = NULL;
-  win = 0;
-  ctx = NULL;
+	uninstall_grabs();
+	mouse_active = false;
+#ifdef __linux__
+	dgamouse = false;
+#endif
+
+	if (dpy) {
+		if (ctx)
+			qglXDestroyContext(dpy, ctx);
+		if (win)
+			XDestroyWindow(dpy, win);
+		XUngrabKeyboard(dpy, CurrentTime);
+		XCloseDisplay(dpy);
+	}
+	ctx = NULL;
+	dpy = NULL;
+	win = 0;
+/*	
+	qglXChooseVisual             = NULL;
+	qglXCreateContext            = NULL;
+	qglXDestroyContext           = NULL;
+	qglXMakeCurrent              = NULL;
+	qglXCopyContext              = NULL;
+	qglXSwapBuffers              = NULL;
+*/	
 }
 
 /*
@@ -910,8 +925,9 @@ int GLimp_Init( void *hinstance, void *wndproc )
 		qglXMakeCurrent              =  GPA("glXMakeCurrent");
 		qglXCopyContext              =  GPA("glXCopyContext");
 		qglXSwapBuffers              =  GPA("glXSwapBuffers");
+		qglXGetConfig                =  GPA("glXGetConfig");
 		
-  return true;
+		return true;
 	}
 	
 	return false;

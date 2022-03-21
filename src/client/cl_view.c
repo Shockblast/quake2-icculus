@@ -470,7 +470,9 @@ SCR_DrawCrosshair
 */
 void SCR_DrawCrosshair (void)
 {
+#ifdef QMAX
   float scale;
+#endif
 	if (!crosshair->value)
 		return;
 
@@ -494,9 +496,8 @@ void SCR_DrawCrosshair (void)
 
 #ifdef QMAX
 	scale = crosshair_scale->value * (viddef.width/640);
-	  
 	re.DrawScaledPic (scr_vrect.x + ((scr_vrect.width - crosshair_width)>>1) //width
-			  , scr_vrect.y + ((scr_vrect.height - crosshair_height)>>1)	//height
+			    , scr_vrect.y + ((scr_vrect.height - crosshair_height)>>1)	//height
 			  , scale	//scale
 			  , 0.75 + 0.25*sin(anglemod(cl.time*0.005))	//alpha
 			  , crosshair_pic); //pic
@@ -559,10 +560,10 @@ void V_RenderView( float stereo_separation )
 		// offset vieworg appropriately if we're doing stereo separation
 		if ( stereo_separation != 0 )
 		{
-			vec3_t tmp;
-
-			VectorScale( cl.v_right, stereo_separation, tmp );
-			VectorAdd( cl.refdef.vieworg, tmp, cl.refdef.vieworg );
+		  vec3_t tmp;
+		  
+		  VectorScale( cl.v_right, stereo_separation, tmp );
+		  VectorAdd( cl.refdef.vieworg, tmp, cl.refdef.vieworg );
 		}
 
 		// never let it sit exactly on a node line, because a water plane can
