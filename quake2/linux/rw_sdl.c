@@ -409,6 +409,16 @@ int SWimp_Init( void *hInstance, void *wndProc )
 	return true;
 }
 
+void *GLimp_GetProcAddress(const char *func)
+{
+	return SDL_GL_GetProcAddress(func);
+#if 0
+	void *gah = SDL_GL_GetProcAddress(func);
+	fprintf(stderr, "DEBUG: Now reporting: %s -> %p\n", func, gah);
+	return gah;
+#endif	
+}
+
 int GLimp_Init( void *hInstance, void *wndProc )
 {
 	return SWimp_Init(hInstance, wndProc);

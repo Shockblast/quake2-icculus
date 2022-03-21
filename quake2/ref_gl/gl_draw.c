@@ -339,7 +339,7 @@ void Draw_StretchRaw (int x, int y, int w, int h, int cols, int rows, byte *data
 		hscale = rows/256.0;
 		trows = 256;
 	}
-	t = rows*hscale / 256;
+	t = rows*hscale / 256 - 1.0/512.0;
 
 	if ( !qglColorTableEXT )
 	{
@@ -394,18 +394,18 @@ void Draw_StretchRaw (int x, int y, int w, int h, int cols, int rows, byte *data
 	}
 	qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	qglTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
+	
 	if ( ( gl_config.renderer == GL_RENDERER_MCD ) || ( gl_config.renderer & GL_RENDERER_RENDITION ) ) 
 		qglDisable (GL_ALPHA_TEST);
 
 	qglBegin (GL_QUADS);
-	qglTexCoord2f (0, 0);
+	qglTexCoord2f (1.0/512.0, 1.0/512.0);
 	qglVertex2f (x, y);
-	qglTexCoord2f (1, 0);
+	qglTexCoord2f (511.0/512.0, 1.0/512.0);
 	qglVertex2f (x+w, y);
-	qglTexCoord2f (1, t);
+	qglTexCoord2f (511.0/512.0, t);
 	qglVertex2f (x+w, y+h);
-	qglTexCoord2f (0, t);
+	qglTexCoord2f (1.0/512.0, t);
 	qglVertex2f (x, y+h);
 	qglEnd ();
 

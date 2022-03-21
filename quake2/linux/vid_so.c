@@ -103,7 +103,6 @@ cause the entire video mode and refresh DLL to be reset on the next frame.
 */
 void VID_Restart_f (void)
 {
-	fprintf(stderr, "VID_Restart_f: vid_ref->modified is TRUE\n");
 	vid_ref->modified = true;
 }
 
