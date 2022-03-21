@@ -134,7 +134,7 @@ void gib_die (edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, 
 
 void ThrowGib (edict_t *self, char *gibname, int damage, int type)
 {
-	edict_t *gib;
+  edict_t *gib;
 	vec3_t	vd;
 	vec3_t	origin;
 	vec3_t	size;
@@ -157,14 +157,14 @@ void ThrowGib (edict_t *self, char *gibname, int damage, int type)
 
 	if (type == GIB_ORGANIC)
 	{
-		gib->movetype = MOVETYPE_TOSS;
-		gib->touch = gib_touch;
-		vscale = 0.5;
+	  gib->movetype = MOVETYPE_TOSS;
+	  gib->touch = gib_touch;
+	  vscale = 0.5;
 	}
 	else
 	{
-		gib->movetype = MOVETYPE_BOUNCE;
-		vscale = 1.0;
+	  gib->movetype = MOVETYPE_BOUNCE;
+	  vscale = 1.0;
 	}
 
 	VelocityForDamage (damage, vd);
