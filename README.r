@@ -1,4 +1,4 @@
-id Software's Quake2 3.19+Changes by Steven Fuller <relnev@icculus.org>, 
+id Software's Quake2 3.21+Changes by Steven Fuller <relnev@icculus.org>, 
                                      et al.
 
 
@@ -14,13 +14,13 @@ softsdl or sdlgl drivers, or the sdlquake2 binary.
 You can change what drivers you wish to build by editing the Makefile and
 changing the BUILD_ lines at the very top.
 
-
 'make' will, by default, build both the debug and release files.
-To build fully optimized binaries: cd quake2 && make build_release
+To build fully optimized binaries: make build_release
 The resulting binaries are then put in releasei386.
 
 
-To install the Quake2 data:
+To install the Quake2 gamedata:
+-------------------------------
 (installdir is wherever you want to install quake2, and cdromdir is wherever
 you mount the Quake 2 CD-ROM)
 1. copy <cdromdir>/Install/Data/baseq2/pak0.pak to <installdir>/baseq2/
@@ -38,6 +38,7 @@ you mount the Quake 2 CD-ROM)
    <installdir>/baseq2/
 
 To install this program:
+------------------------
 (builddir is either debugi386 or releasei386)
 1. copy <builddir>/gamei386.so to <installdir>/baseq2/
 2. copy <builddir>/ref_*.so to <installdir>
@@ -46,6 +47,7 @@ To install this program:
 
 
 To run:
+-------
 cd <installdir> && ./quake2
 Or:
 quake2 +set basedir <installdir>
@@ -64,6 +66,7 @@ builds (this is due to how savegames were stored).
 
 
 Commonly used commands:
+-----------------------
 cd_nocd 0               // disable CD audio
 s_initsound 0           // disable sound
 _windowed_mouse 0       // disable mouse-grabbing
@@ -76,8 +79,19 @@ vid_fullscreen 0        // disable fullscreen mode
 vid_restart             // restart video driver
 snd_restart             // restart sound driver
 basedir <dir>           // point quake2 to where the data is
+gl_driver <libGL.so>    // point quake2 to your libGL
 
-I'll post any updates I make at http://www.icculus.org/~relnev/
+
+Website:
+--------
+I'll post any updates I make at http://www.icculus.org/quake/ 
+(which currently redirects to http://www.icculus.org/~relnev/)
+
+Anonymous CVS access:
+---------------------
+cvs -d:pserver:anonymous@icculus.org:/cvs/cvsroot login
+      (password is "anonymous" without the quotes.)
+cvs -z3 -d:pserver:anonymous@icculus.org:/cvs/cvsroot co quake2
 
 Questions:
 ----------
@@ -87,6 +101,10 @@ TODO:
 -----
 Fix save games.
 Suggestions, anyone?
+
+v0.0.7: [12/28/01]
+-------
++ Merged in Quake2 3.21 source.
 
 v0.0.6: [12/27/01]
 -------
@@ -132,5 +150,7 @@ John Allensworth
 Stephen Anthony
 William Aoki
 Robert Bäuml
+Ryan C. Gordon
 Ludwig Nussel
+Zachary 'zakk' Slater
 Matti Valtonen
