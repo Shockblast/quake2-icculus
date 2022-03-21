@@ -92,6 +92,7 @@ void CL_ExplosionParticles (vec3_t org, float alpha);
 #define EXPLOSION_PARTICLES(x) CL_ExplosionParticles((x), 1);
 #else
 void CL_ExplosionParticles (vec3_t org);
+void CL_Explosion_Particle (vec3_t org, float size, qboolean large, qboolean rocket);
 #define EXPLOSION_PARTICLES(x) CL_ExplosionParticles((x));
 #endif
 
@@ -1877,7 +1878,6 @@ CL_AddExplosions
 */
 void CL_AddExplosions (void)
 {
-  /*
   entity_t	*ent;
   int			i;
   explosion_t	*ex;
@@ -1974,7 +1974,6 @@ void CL_AddExplosions (void)
 
 		V_AddEntity (ent);
 	}
-  */
 }
 
 
