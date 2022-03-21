@@ -33,9 +33,11 @@ ifeq ($(ARCH),axp)
 RELEASE_CFLAGS=$(BASE_CFLAGS) -ffast-math -funroll-loops \
 	-fomit-frame-pointer -fexpensive-optimizations
 else
-RELEASE_CFLAGS=$(BASE_CFLAGS) -mpentium -O6 -ffast-math -funroll-loops \
-	-fomit-frame-pointer -fexpensive-optimizations -malign-loops=2 \
+RELEASE_CFLAGS=$(BASE_CFLAGS) -O6 -ffast-math -funroll-loops \
+	-fexpensive-optimizations -malign-loops=2 \
 	-malign-jumps=2 -malign-functions=2
+# if your compiler can handle it
+# RELEASE_CFLAGS += -fomit-frame-pointer
 endif
 
 DEBUG_CFLAGS=$(BASE_CFLAGS) -g
@@ -49,7 +51,7 @@ SDLLDFLAGS=`sdl-config --libs`
 
 GLLDFLAGS=-L/usr/local/glide/lib -L/usr/X11/lib -L/usr/local/lib \
 	-L/usr/X11R6/lib -lGL -lX11 -lXext -lvga
-GLCFLAGS=-I/usr/local/src/Mesa-2.6/include -I/usr/local/glide/include
+GLCFLAGS=
 
 SDLGLLDFLAGS=-L/usr/X11R6/lib `sdl-config --libs` -lGL -lX11 -lXext
 

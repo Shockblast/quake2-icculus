@@ -304,10 +304,9 @@ int main (int argc, char **argv)
 
 }
 
+#if 0
 void Sys_CopyProtect(void)
 {
-	fprintf(stderr, "CopyProtect this!\n");
-#if 0
 	FILE *mnt;
 	struct mntent *ent;
 	char path[MAX_OSPATH];
@@ -355,8 +354,8 @@ void Sys_CopyProtect(void)
 		Com_Error (ERR_FATAL, "Could not find a Quake2 CD in your CD drive.");
 	Com_Error (ERR_FATAL, "Unable to find a mounted iso9660 file system.\n"
 		"You must mount the Quake2 CD in a cdrom drive in order to play.");
-#endif		
 }
+#endif
 
 #if 0
 /*

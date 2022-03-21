@@ -218,7 +218,7 @@ void RW_IN_Activate(void)
 
 /*****************************************************************************/
 
-
+#if 0 /* SDL parachute should catch everything... */
 // ========================================================================
 // Tragic death handler
 // ========================================================================
@@ -228,6 +228,7 @@ void TragicDeath(int signal_num)
 	/* SDL_Quit(); */
 	Sys_Error("This death brought to you by the number %d\n", signal_num);
 }
+#endif
 
 int XLateKey(unsigned int keysym)
 {
@@ -307,6 +308,9 @@ int XLateKey(unsigned int keysym)
 		case SDLK_KP_MINUS:		key = K_KP_MINUS; break;
 		case SDLK_KP_DIVIDE:		key = K_KP_SLASH; break;
 		
+		/* suggestions on how to handle this better would be appreciated */
+		case SDLK_WORLD_7:		key = '`'; break;
+		
 		default: /* assuming that the other sdl keys are mapped to ascii */
 			if (keysym < 128)
 				key = keysym;
@@ -357,63 +361,15 @@ void GetEvent(SDL_Event *event)
 			keyq_head = (keyq_head + 1) & 63;
 		}
 		break;
-#if 0
-	case MotionNotify:
-		if (_windowed_mouse->value) {
-			mx += ((int)x_event.xmotion.x - (int)(vid.width/2));
-			my += ((int)x_event.xmotion.y - (int)(vid.height/2));
-
-			/* move the mouse to the window center again */
-			XSelectInput(x_disp,x_win, STD_EVENT_MASK & ~PointerMotionMask);
-			XWarpPointer(x_disp,None,x_win,0,0,0,0, 
-				(vid.width/2),(vid.height/2));
-			XSelectInput(x_disp,x_win, STD_EVENT_MASK);
-		} else {
-			mx = ((int)x_event.xmotion.x - (int)p_mouse_x);
-			my = ((int)x_event.xmotion.y - (int)p_mouse_y);
-			p_mouse_x=x_event.xmotion.x;
-			p_mouse_y=x_event.xmotion.y;
-		}
+	case SDL_QUIT:
+		ri.Cmd_ExecuteText(EXEC_NOW, "quit");
 		break;
-
-	case ButtonPress:
-		b=-1;
-		if (x_event.xbutton.button == 1)
-			b = 0;
-		else if (x_event.xbutton.button == 2)
-			b = 2;
-		else if (x_event.xbutton.button == 3)
-			b = 1;
-		if (b>=0)
-			mouse_buttonstate |= 1<<b;
-		break;
-
-	case ButtonRelease:
-		b=-1;
-		if (x_event.xbutton.button == 1)
-			b = 0;
-		else if (x_event.xbutton.button == 2)
-			b = 2;
-		else if (x_event.xbutton.button == 3)
-			b = 1;
-		if (b>=0)
-			mouse_buttonstate &= ~(1<<b);
-		break;
-#endif	
 	}
 
 }
 
 /*****************************************************************************/
 
-static void mySDL_Quit()
-{
-	fprintf(stderr, "Shutting down renderer module...\n");
-	SDL_WM_GrabInput(SDL_GRAB_OFF);
-//	SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
-	SDL_Quit();
-}
-	
 /*
 ** SWimp_Init
 **
@@ -423,13 +379,10 @@ static void mySDL_Quit()
 int SWimp_Init( void *hInstance, void *wndProc )
 {
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		fprintf(stderr, "DEBUG: SDL Init failed: %s\n", SDL_GetError());
+		Sys_Error("SDL Init failed: %s\n", SDL_GetError());
 		return false;
 	}
-	
-	fprintf(stderr, "Registering SDL atexit routine...\n");
-	atexit(mySDL_Quit);
-	
+
 //	SDL_EnableKeyRepeat(0, SDL_DEFAULT_REPEAT_INTERVAL);
 	
 // catch signals so i can turn on auto-repeat
@@ -446,20 +399,17 @@ int SWimp_Init( void *hInstance, void *wndProc )
 	return true;
 }
 
+#ifdef OPENGL
 void *GLimp_GetProcAddress(const char *func)
 {
 	return SDL_GL_GetProcAddress(func);
-#if 0
-	void *gah = SDL_GL_GetProcAddress(func);
-	fprintf(stderr, "DEBUG: Now reporting: %s -> %p\n", func, gah);
-	return gah;
-#endif	
 }
 
 int GLimp_Init( void *hInstance, void *wndProc )
 {
 	return SWimp_Init(hInstance, wndProc);
 }
+#endif
 
 /*
 ** SWimp_InitGraphics
@@ -475,11 +425,24 @@ int GLimp_Init( void *hInstance, void *wndProc )
 static qboolean SWimp_InitGraphics( qboolean fullscreen )
 {
 	const SDL_VideoInfo *vinfo;
+	int flags;
 
+	/* Just toggle fullscreen if that's all that has been changed */	
+	if (surface && (surface->w == vid.width) && (surface->h == vid.height)) {
+		int isfullscreen = (surface->flags & SDL_FULLSCREEN) ? 1 : 0;
+		if (fullscreen != isfullscreen)
+			SDL_WM_ToggleFullScreen(surface);
+	
+		isfullscreen = (surface->flags & SDL_FULLSCREEN) ? 1 : 0;
+		if (fullscreen == isfullscreen)
+			return true;
+	}
+	
 	srandom(getpid());
 
 	// free resources in use
-	SWimp_Shutdown ();
+	if (surface)
+		SDL_FreeSurface(surface);
 
 	// let the sound and input subsystems know about the new window
 	ri.Vid_NewWindow (vid.width, vid.height);
@@ -494,13 +457,14 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 	vinfo = SDL_GetVideoInfo();
 	sdl_palettemode = (vinfo->vfmt->BitsPerPixel == 8) ? (SDL_PHYSPAL|SDL_LOGPAL) : SDL_LOGPAL;
 	
-// check for command-line window size
-	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 8, /*SDL_DOUBLEBUF|*/SDL_SWSURFACE|SDL_HWPALETTE)) == NULL) {
+	flags = /*SDL_DOUBLEBUF|*/SDL_SWSURFACE|SDL_HWPALETTE;
+	if (fullscreen)
+		flags |= SDL_FULLSCREEN;
+	
+	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 8, flags)) == NULL) {
+		Sys_Error("(SOFTSDL) SDL SetVideoMode failed: %s\n", SDL_GetError());
 		return false;
 	}
-
-	if (fullscreen)
-		SDL_WM_ToggleFullScreen(surface);
 	
 	SDL_WM_SetCaption("Quake II", "Quake II");
 
@@ -516,10 +480,24 @@ static qboolean SWimp_InitGraphics( qboolean fullscreen )
 #else
 static qboolean GLimp_InitGraphics( qboolean fullscreen )
 {
+	int flags;
+	
+	/* Just toggle fullscreen if that's all that has been changed */
+	if (surface && (surface->w == vid.width) && (surface->h == vid.height)) {
+		int isfullscreen = (surface->flags & SDL_FULLSCREEN) ? 1 : 0;
+		if (fullscreen != isfullscreen)
+			SDL_WM_ToggleFullScreen(surface);
+	
+		isfullscreen = (surface->flags & SDL_FULLSCREEN) ? 1 : 0;
+		if (fullscreen == isfullscreen)
+			return true;
+	}
+	
 	srandom(getpid());
 
 	// free resources in use
-	GLimp_Shutdown ();
+	if (surface)
+		SDL_FreeSurface(surface);
 
 	// let the sound and input subsystems know about the new window
 	ri.Vid_NewWindow (vid.width, vid.height);
@@ -530,14 +508,15 @@ static qboolean GLimp_InitGraphics( qboolean fullscreen )
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	
-	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 0, SDL_OPENGL)) == NULL) {
-		fprintf(stderr, "(OpenGL) SDL SetVideoMode failed: %s\n", SDL_GetError());
+	flags = SDL_OPENGL;
+	if (fullscreen)
+		flags |= SDL_FULLSCREEN;
+		
+	if ((surface = SDL_SetVideoMode(vid.width, vid.height, 0, flags)) == NULL) {
+		Sys_Error("(SDLGL) SDL SetVideoMode failed: %s\n", SDL_GetError());
 		return false;
 	}
 
-	if (fullscreen)
-		SDL_WM_ToggleFullScreen(surface);
-	
 	SDL_WM_SetCaption("Quake II", "Quake II");
 
 	SDL_ShowCursor(0);
@@ -663,19 +642,17 @@ void SWimp_SetPalette( const unsigned char *palette )
 
 void SWimp_Shutdown( void )
 {
-	if (surface)
-		SDL_FreeSurface(surface);
-	surface == NULL;
-	
-	/* SDL_Quit(); */
+	SDL_Quit();
 	
 	X11_active = false;
 }
 
+#ifdef OPENGL
 void GLimp_Shutdown( void )
 {
 	SWimp_Shutdown();
 }
+#endif
 
 /*
 ** SWimp_AppActivate
@@ -743,9 +720,9 @@ void KBD_Update(void)
 		while (SDL_PollEvent(&event))
 			GetEvent(&event);
 
-	
-	SDL_GetRelativeMouseState(&mx, &my);
-	
+	if (!mx && !my)
+		SDL_GetRelativeMouseState(&mx, &my);
+		
 	mouse_buttonstate = 0;
 	bstate = SDL_GetMouseState(NULL, NULL);
 	if (SDL_BUTTON(1) & bstate)
