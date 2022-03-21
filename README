@@ -1,5 +1,5 @@
         Minor OS-oriented changes to id Software's Quake2 3.21: 
-                        "It works for me and a few others, v0.10"
+                        "It works for me and a few others, v0.12"
 
 (NOTE: throughout this document, references to i386 [debugi386, releasei386,
  gamei386.so] are used.  If your architecture is not i386, just substitute
@@ -50,8 +50,10 @@ BUILD_JOYSTICK		Build quake2 with support for SDL and Linux joysticks,
 			[default = YES].
 BUILD_ARTS		Build support for the aRts sound system 
 			(src/linux/snd_arts.c) [default = NO]
+BUILD_DEDICATED		Build the quake 2 dedicated server q2ded.
 
 To install the Quake2 demo data:
+--------------------------------
 (installdir is whereever you want to install quake2)
 1. download ftp://ftp.idsoftware.com/idstuff/quake2/q2-314-demo-x86.exe
 2. unzip -L q2-314-demo-x86.exe into a temp directory
@@ -304,7 +306,6 @@ TODO:
 Fix save games.
 Verify that FXGL works.
 Fullscreen/DGA support in X11 driver.
-Have menu only list ref libs that are available.
 Have menu only list window sizes that are available.
 Make a list of tested mods.
 Make Q2 as Arch/OS independent as possible.
@@ -330,6 +331,12 @@ Florent Parent
 Victor Shkamerda
 Zachary 'zakk' Slater
 Matti Valtonen
+
+v 0.12: [6/11/02]
+-----
+Added Joystick support to GLX, start migration to unified X event handling
+Modified video driver selection to reflect drivers actually present (Stephen 
+Anthony)
 
 v 0.11: [5/10/02]
 -----
